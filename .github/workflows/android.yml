@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout
@@ -20,19 +20,38 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: 3.11
+          python-version: "3.11"
 
-      - name: Accept Android Licenses
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Licenses
         run: |
           mkdir -p ~/.android
-          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > ~/.android/repositories.cfg || true
+          touch ~/.android/repositories.cfg
+          yes | sdkmanager --licenses
+
+      - name: Install Android Packages
+        run: |
+          sdkmanager "platform-tools"
+          sdkmanager "platforms;android-33"
+          sdkmanager "build-tools;33.0.2"
 
       - name: Install Buildozer
         run: |
           sudo apt-get update
-          sudo apt-get install -y zip unzip git openjdk-17-jdk
-          pip install --upgrade pip
-          pip install buildozer cython
+          sudo apt-get install -y \
+            zip unzip git openjdk-17-jdk \
+            autoconf automake libtool pkg-config \
+            zlib1g-dev
+
+          python -m pip install --upgrade pip
+          pip install cython buildozer
+
+      - name: Clean Old Build
+        run: |
+          rm -rf .buildozer
+          rm -rf bin
 
       - name: Build APK
         run: |
@@ -41,5 +60,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: APK
+          name: MoneyTracker-APK
           path: bin/*.apk
