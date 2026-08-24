@@ -11,6 +11,7 @@ fullscreen = 0
 android.api = 33
 android.minapi = 21
 android.ndk = 25b
+android.build_tools_version = 33.0.2
 android.gradle_dependencies =
 p4a.branch = master
 android.archs = arm64-v8a,armeabi-v7a
