@@ -1,10 +1,10 @@
-name: Money Tracker Android APK
+name: Money Tracker Android
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-apk:
+  build:
     runs-on: ubuntu-22.04
 
     steps:
@@ -15,69 +15,31 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            python3-pip \
+            git \
             zip \
             unzip \
-            git \
-            openjdk-17-jdk \
-            python3-pip
+            openjdk-17-jdk
 
-      - name: Extract Money Tracker project
-        run: |
-          rm -rf build_project
-          mkdir -p build_project
-
-          unzip -q MoneyTracker_Android_APK_Build.zip \
-            -d build_project
-
-          echo "Extracted files:"
-          find build_project -maxdepth 4 -type f | sort
-
-      - name: Locate Android project
-        run: |
-          PROJECT=$(find build_project -name buildozer.spec -type f | head -n 1 | xargs dirname)
-
-          if [ -z "$PROJECT" ]; then
-            echo "ERROR: buildozer.spec not found"
-            exit 1
-          fi
-
-          echo "PROJECT_DIR=$PROJECT" >> "$GITHUB_ENV"
-          echo "Project found at: $PROJECT"
-
-      - name: Install Python build dependencies
+      - name: Install Python dependencies
         run: |
           python3 -m pip install --upgrade pip
-          python3 -m pip install buildozer==1.6.0
-          python3 -m pip install cython==0.29.34
+          pip install buildozer cython==0.29.34
 
-      - name: Show build configuration
-        working-directory: ${{ env.PROJECT_DIR }}
+      - name: Check project
         run: |
-          echo "========== BUILDOZER SPEC =========="
-          cat buildozer.spec
-          echo "===================================="
-          echo
-          echo "========== PROJECT FILES =========="
+          pwd
           find . -maxdepth 3 -type f | sort
-          echo "===================================="
+          test -f buildozer.spec
+          test -f main.py
 
-      - name: Build Debug APK
-        working-directory: ${{ env.PROJECT_DIR }}
-        env:
-          BUILDOZER_ALLOW_ROOT: "1"
+      - name: Build Android Debug APK
         run: |
-          yes | buildozer -v android debug
-
-      - name: Find APK
-        working-directory: ${{ env.PROJECT_DIR }}
-        run: |
-          echo "========== APK FILES =========="
-          find bin -type f -name "*.apk" -print
-          echo "=============================="
+          buildozer -v android debug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: MoneyTracker-Debug-APK
-          path: ${{ env.PROJECT_DIR }}/bin/*.apk
+          path: bin/*.apk
           if-no-files-found: error
