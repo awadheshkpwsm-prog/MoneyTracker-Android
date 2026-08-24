@@ -12,14 +12,15 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
       - name: Install System Dependencies
+        shell: bash
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -40,11 +41,13 @@ jobs:
             libssl-dev
 
       - name: Check Java
+        shell: bash
         run: |
           java -version
           echo "JAVA_HOME=$JAVA_HOME"
 
       - name: Install Python Build Tools
+        shell: bash
         run: |
           python -m pip install --upgrade pip
           pip install "Cython==0.29.34"
@@ -52,6 +55,7 @@ jobs:
           pip install "kivy==2.3.1"
 
       - name: Check Build Environment
+        shell: bash
         run: |
           echo "===== BUILD ENVIRONMENT ====="
           python --version
@@ -59,7 +63,7 @@ jobs:
           cython --version
           echo "============================="
 
-      - name: Find Project Directory
+      - name: Find Project Files
         shell: bash
         run: |
           echo "===== PROJECT FILES ====="
@@ -81,37 +85,66 @@ jobs:
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-          echo "Found buildozer.spec:"
-          echo "$SPEC_FILE"
-          echo "Project directory:"
-          echo "$PROJECT_DIR"
+          echo "===== BUILD CONFIGURATION ====="
+          echo "buildozer.spec: $SPEC_FILE"
+          echo "PROJECT_DIR: $PROJECT_DIR"
+          echo "==============================="
 
       - name: Check Project
         shell: bash
         run: |
           echo "===== PROJECT CHECK ====="
           echo "Project directory: $PROJECT_DIR"
-          ls -la "$PROJECT_DIR"
 
-          if [ ! -f "$PROJECT_DIR/buildozer.spec" ]; then
-            echo "ERROR: buildozer.spec missing!"
+          if [ ! -d "$PROJECT_DIR" ]; then
+            echo "ERROR: Project directory not found!"
             exit 1
           fi
 
-          echo "===== buildozer.spec found ====="
+          if [ ! -f "$PROJECT_DIR/buildozer.spec" ]; then
+            echo "ERROR: buildozer.spec not found!"
+            exit 1
+          fi
+
+          ls -la "$PROJECT_DIR"
+
+          echo "===== buildozer.spec ====="
+          sed -n '1,220p' "$PROJECT_DIR/buildozer.spec"
+          echo "=========================="
 
       - name: Build Debug APK
         shell: bash
         run: |
           cd "$PROJECT_DIR"
-          echo "===== STARTING BUILD ====="
+
+          echo "========================================"
+          echo "     MONEY TRACKER APK BUILD START"
+          echo "========================================"
+
           buildozer -v android debug
+
+          echo "========================================"
+          echo "     MONEY TRACKER APK BUILD END"
+          echo "========================================"
 
       - name: Find APK
         shell: bash
         run: |
           echo "===== APK SEARCH ====="
-          find "$PROJECT_DIR" -type f -name "*.apk" -print
+
+          find "$PROJECT_DIR" \
+            -type f \
+            -name "*.apk" \
+            -print
+
+          APK_COUNT=$(find "$PROJECT_DIR" -type f -name "*.apk" | wc -l)
+
+          if [ "$APK_COUNT" -eq 0 ]; then
+            echo "ERROR: No APK was generated!"
+            exit 1
+          fi
+
+          echo "APK files found: $APK_COUNT"
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
