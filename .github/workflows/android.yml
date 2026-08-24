@@ -23,11 +23,6 @@ jobs:
 
       - name: Find Money Tracker ZIP
         run: |
-          echo "Searching for ZIP..."
-          find . -type f -iname "*.zip" -print
-
-      - name: Extract Money Tracker project
-        run: |
           ZIP_FILE=$(find . -type f -iname "MoneyTracker_Android_APK_Build.zip" | head -n 1)
 
           if [ -z "$ZIP_FILE" ]; then
@@ -35,18 +30,18 @@ jobs:
             exit 1
           fi
 
+          echo "ZIP=$ZIP_FILE"
+
           mkdir -p extracted
           unzip -o "$ZIP_FILE" -d extracted
 
-          echo "Extracted files:"
-          find extracted -maxdepth 4 -type f | sort
-
-      - name: Locate Buildozer project
+      - name: Locate project
         run: |
           PROJECT=$(find extracted -name buildozer.spec -type f -print -quit)
 
           if [ -z "$PROJECT" ]; then
             echo "ERROR: buildozer.spec not found"
+            find extracted -maxdepth 5 -type f | sort
             exit 1
           fi
 
@@ -54,34 +49,50 @@ jobs:
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-          echo "Project found:"
+          echo "Project:"
           echo "$PROJECT_DIR"
 
-      - name: Check project
+      - name: Verify project
         run: |
-          echo "Project directory:"
-          echo "$PROJECT_DIR"
-
           test -f "$PROJECT_DIR/buildozer.spec"
           test -f "$PROJECT_DIR/main.py"
 
-          echo "Project files:"
-          find "$PROJECT_DIR" -maxdepth 3 -type f | sort
+          echo "buildozer.spec: OK"
+          echo "main.py: OK"
 
-      - name: Install Python build tools
+      - name: Install Buildozer
         run: |
           python3 -m pip install --upgrade pip
           pip install buildozer
           pip install "cython==0.29.34"
 
-      - name: Build Debug APK
+      - name: Prepare Android SDK licenses
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+
+      - name: Install Android Build Tools
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+      - name: Configure Buildozer
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
-          buildozer -v android debug
+          echo "===== BUILDOZER SPEC ====="
+          cat buildozer.spec
+
+      - name: Build Debug APK
+        working-directory: ${{ env.PROJECT_DIR }}
+        env:
+          P4A_BUILD_ARGS: "--sdk_dir=$ANDROID_HOME"
+        run: |
+          yes | buildozer -v android debug
 
       - name: Find APK
         run: |
-          echo "Searching for APK..."
+          echo "===== APK SEARCH ====="
           find "$PROJECT_DIR" -type f -name "*.apk" -print
 
       - name: Upload Debug APK
