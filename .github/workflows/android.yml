@@ -84,11 +84,11 @@ jobs:
           cat buildozer.spec
 
       - name: Build Debug APK
-        working-directory: ${{ env.PROJECT_DIR }}
-        env:
-          P4A_BUILD_ARGS: "--sdk_dir=$ANDROID_HOME"
-        run: |
-          yes | buildozer -v android debug
+  working-directory: ${{ env.PROJECT_DIR }}
+  env:
+    P4A_BUILD_ARGS: "--sdk_dir=$ANDROID_HOME"
+  run: |
+    buildozer -v android debug
 
       - name: Find APK
         run: |
