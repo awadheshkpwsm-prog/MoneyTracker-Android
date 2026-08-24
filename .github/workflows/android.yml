@@ -13,17 +13,8 @@ jobs:
 
     steps:
 
-      # --------------------------------------------------
-      # CHECKOUT PROJECT
-      # --------------------------------------------------
-
       - name: Checkout
         uses: actions/checkout@v4
-
-
-      # --------------------------------------------------
-      # JAVA 17
-      # --------------------------------------------------
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -31,25 +22,14 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-
-      # --------------------------------------------------
-      # PYTHON 3.11
-      # --------------------------------------------------
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-
-      # --------------------------------------------------
-      # LINUX DEPENDENCIES
-      # --------------------------------------------------
-
       - name: Install Linux Dependencies
         run: |
           sudo apt-get update
-
           sudo apt-get install -y \
             git \
             zip \
@@ -63,37 +43,22 @@ jobs:
             libssl-dev \
             cmake
 
-
-      # --------------------------------------------------
-      # ANDROID SDK
-      # --------------------------------------------------
-
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-
-      # --------------------------------------------------
-      # PREPARE ANDROID SDK
-      # --------------------------------------------------
-
-      - name: Prepare Android SDK
+      - name: Configure Android SDK
         run: |
-          mkdir -p "$ANDROID_HOME"
+          mkdir -p ~/.android
+          touch ~/.android/repositories.cfg
 
           echo "ANDROID_HOME=$ANDROID_HOME"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
 
-          mkdir -p ~/.android
-          touch ~/.android/repositories.cfg
-
+      - name: Accept All Android Licenses
+        run: |
           yes | sdkmanager \
             --sdk_root="$ANDROID_HOME" \
             --licenses || true
-
-
-      # --------------------------------------------------
-      # INSTALL REQUIRED ANDROID PACKAGES
-      # --------------------------------------------------
 
       - name: Install Android SDK Packages
         run: |
@@ -101,102 +66,77 @@ jobs:
             --sdk_root="$ANDROID_HOME" \
             "platform-tools" \
             "platforms;android-33" \
-            "build-tools;33.0.2"
+            "build-tools;33.0.2" \
+            "build-tools;37.0.0"
 
+      - name: Accept Licenses Again
+        run: |
+          yes | sdkmanager \
+            --sdk_root="$ANDROID_HOME" \
+            --licenses || true
 
-      # --------------------------------------------------
-      # VERIFY ANDROID SDK
-      # --------------------------------------------------
-
-      - name: Verify Android SDK
+      - name: Verify SDK
         run: |
           echo "======================================"
-          echo "ANDROID SDK INFORMATION"
+          echo "INSTALLED SDK PACKAGES"
           echo "======================================"
 
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-
-          echo ""
-          echo "Installed SDK Packages:"
           sdkmanager \
             --sdk_root="$ANDROID_HOME" \
             --list_installed || true
 
           echo ""
           echo "======================================"
-          echo "BUILD TOOLS 33.0.2"
+          echo "BUILD TOOLS"
           echo "======================================"
 
-          ls -lah \
-            "$ANDROID_HOME/build-tools/33.0.2"
+          ls -lah "$ANDROID_HOME/build-tools"
 
           echo ""
           echo "======================================"
-          echo "CHECK AIDL"
+          echo "AIDL 33"
           echo "======================================"
 
-          test -x \
-            "$ANDROID_HOME/build-tools/33.0.2/aidl"
+          test -x "$ANDROID_HOME/build-tools/33.0.2/aidl"
 
           "$ANDROID_HOME/build-tools/33.0.2/aidl" \
             --help >/dev/null
 
-          echo "AIDL executable OK"
+          echo "AIDL 33.0.2 OK"
 
           echo ""
-          echo "Android SDK 33 verified"
-          echo "Build Tools 33.0.2 verified"
+          echo "======================================"
+          echo "AIDL 37"
+          echo "======================================"
 
-
-      # --------------------------------------------------
-      # PYTHON BUILD DEPENDENCIES
-      # --------------------------------------------------
+          if [ -f "$ANDROID_HOME/build-tools/37.0.0/aidl" ]; then
+            echo "AIDL 37.0.0 found"
+            "$ANDROID_HOME/build-tools/37.0.0/aidl" \
+              --help >/dev/null || true
+          else
+            echo "Build Tools 37.0.0 AIDL not found"
+          fi
 
       - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install --upgrade setuptools wheel
-
           pip install "Cython<3"
-
           pip install buildozer==1.5.0
 
-
-      # --------------------------------------------------
-      # CLEAN OLD BUILD
-      # --------------------------------------------------
-
-      - name: Clean Build Cache
+      - name: Clean Build
         run: |
           rm -rf .buildozer
           rm -rf bin
 
-
-      # --------------------------------------------------
-      # ACCEPT ANDROID LICENSES
-      # --------------------------------------------------
-
-      - name: Accept Android Licenses
+      - name: Final License Check
         run: |
-          mkdir -p ~/.android
-          touch ~/.android/repositories.cfg
-
           yes | sdkmanager \
             --sdk_root="$ANDROID_HOME" \
             --licenses || true
 
-
-      # --------------------------------------------------
-      # SHOW BUILD CONFIGURATION
-      # --------------------------------------------------
-
-      - name: Show Build Configuration
+      - name: Show Build Environment
         run: |
-          echo "======================================"
-          echo "BUILD CONFIGURATION"
-          echo "======================================"
-
           echo "Java:"
           java -version
 
@@ -212,29 +152,11 @@ jobs:
           echo "ANDROID_HOME:"
           echo "$ANDROID_HOME"
 
-          echo ""
-          echo "Android Platform:"
-          ls -lah "$ANDROID_HOME/platforms/android-33"
-
-          echo ""
-          echo "Build Tools:"
-          ls -lah "$ANDROID_HOME/build-tools/33.0.2"
-
-
-      # --------------------------------------------------
-      # BUILD APK
-      # --------------------------------------------------
-
       - name: Build APK
         run: |
           buildozer -v android debug
 
-
-      # --------------------------------------------------
-      # CHECK APK
-      # --------------------------------------------------
-
-      - name: Check APK Output
+      - name: Check APK
         if: always()
         run: |
           echo "======================================"
@@ -243,14 +165,11 @@ jobs:
 
           ls -lah bin || true
 
-          echo ""
-          echo "APK FILES:"
-          find bin -maxdepth 1 -type f -name "*.apk" -print || true
-
-
-      # --------------------------------------------------
-      # UPLOAD APK
-      # --------------------------------------------------
+          find bin \
+            -maxdepth 1 \
+            -type f \
+            -name "*.apk" \
+            -print || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
