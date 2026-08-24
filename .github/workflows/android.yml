@@ -17,29 +17,76 @@ jobs:
           sudo apt-get install -y \
             python3-pip \
             git \
-            zip \
             unzip \
+            zip \
             openjdk-17-jdk
 
-      - name: Install Python dependencies
+      - name: Find Money Tracker ZIP
         run: |
-          python3 -m pip install --upgrade pip
-          pip install buildozer cython==0.29.34
+          echo "Searching for ZIP..."
+          find . -type f -iname "*.zip" -print
+
+      - name: Extract Money Tracker project
+        run: |
+          ZIP_FILE=$(find . -type f -iname "MoneyTracker_Android_APK_Build.zip" | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: MoneyTracker_Android_APK_Build.zip not found"
+            exit 1
+          fi
+
+          mkdir -p extracted
+          unzip -o "$ZIP_FILE" -d extracted
+
+          echo "Extracted files:"
+          find extracted -maxdepth 4 -type f | sort
+
+      - name: Locate Buildozer project
+        run: |
+          PROJECT=$(find extracted -name buildozer.spec -type f -print -quit)
+
+          if [ -z "$PROJECT" ]; then
+            echo "ERROR: buildozer.spec not found"
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$PROJECT")
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+          echo "Project found:"
+          echo "$PROJECT_DIR"
 
       - name: Check project
         run: |
-          pwd
-          find . -maxdepth 3 -type f | sort
-          test -f buildozer.spec
-          test -f main.py
+          echo "Project directory:"
+          echo "$PROJECT_DIR"
 
-      - name: Build Android Debug APK
+          test -f "$PROJECT_DIR/buildozer.spec"
+          test -f "$PROJECT_DIR/main.py"
+
+          echo "Project files:"
+          find "$PROJECT_DIR" -maxdepth 3 -type f | sort
+
+      - name: Install Python build tools
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install buildozer
+          pip install "cython==0.29.34"
+
+      - name: Build Debug APK
+        working-directory: ${{ env.PROJECT_DIR }}
         run: |
           buildozer -v android debug
 
-      - name: Upload APK
+      - name: Find APK
+        run: |
+          echo "Searching for APK..."
+          find "$PROJECT_DIR" -type f -name "*.apk" -print
+
+      - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
           name: MoneyTracker-Debug-APK
-          path: bin/*.apk
+          path: ${{ env.PROJECT_DIR }}/bin/*.apk
           if-no-files-found: error
