@@ -1,96 +1,114 @@
-name: Money Tracker Android
+name: Build Money Tracker APK
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            python3-pip \
             git \
-            unzip \
             zip \
-            openjdk-17-jdk
+            unzip \
+            openjdk-17-jdk \
+            autoconf \
+            automake \
+            libtool \
+            pkg-config \
+            zlib1g-dev \
+            libncurses5-dev \
+            libncursesw5-dev \
+            libtinfo5 \
+            cmake \
+            libffi-dev \
+            libssl-dev
 
-      - name: Find Money Tracker ZIP
+      - name: Check Java
         run: |
-          ZIP_FILE=$(find . -type f -iname "MoneyTracker_Android_APK_Build.zip" | head -n 1)
+          java -version
+          echo "JAVA_HOME=$JAVA_HOME"
 
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: MoneyTracker_Android_APK_Build.zip not found"
+      - name: Install Python Build Tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install "Cython==0.29.34"
+          pip install "buildozer==1.6.0"
+          pip install "kivy==2.3.1"
+
+      - name: Check Build Environment
+        run: |
+          echo "===== BUILD ENVIRONMENT ====="
+          python --version
+          buildozer --version
+          cython --version
+          echo "============================="
+
+      - name: Find Project Directory
+        shell: bash
+        run: |
+          echo "===== PROJECT FILES ====="
+          pwd
+          find . -maxdepth 3 -type f | sort
+          echo "========================="
+
+      - name: Locate buildozer.spec
+        shell: bash
+        run: |
+          SPEC_FILE=$(find . -name "buildozer.spec" -type f | head -n 1)
+
+          if [ -z "$SPEC_FILE" ]; then
+            echo "ERROR: buildozer.spec not found!"
             exit 1
           fi
 
-          echo "ZIP=$ZIP_FILE"
-
-          mkdir -p extracted
-          unzip -o "$ZIP_FILE" -d extracted
-
-      - name: Locate project
-        run: |
-          PROJECT=$(find extracted -name buildozer.spec -type f -print -quit)
-
-          if [ -z "$PROJECT" ]; then
-            echo "ERROR: buildozer.spec not found"
-            find extracted -maxdepth 5 -type f | sort
-            exit 1
-          fi
-
-          PROJECT_DIR=$(dirname "$PROJECT")
+          PROJECT_DIR=$(dirname "$SPEC_FILE")
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-          echo "Project:"
+          echo "Found buildozer.spec:"
+          echo "$SPEC_FILE"
+          echo "Project directory:"
           echo "$PROJECT_DIR"
 
-      - name: Verify project
+      - name: Check Project
+        shell: bash
         run: |
-          test -f "$PROJECT_DIR/buildozer.spec"
-          test -f "$PROJECT_DIR/main.py"
+          echo "===== PROJECT CHECK ====="
+          echo "Project directory: $PROJECT_DIR"
+          ls -la "$PROJECT_DIR"
 
-          echo "buildozer.spec: OK"
-          echo "main.py: OK"
+          if [ ! -f "$PROJECT_DIR/buildozer.spec" ]; then
+            echo "ERROR: buildozer.spec missing!"
+            exit 1
+          fi
 
-      - name: Install Buildozer
-        run: |
-          python3 -m pip install --upgrade pip
-          pip install buildozer
-          pip install "cython==0.29.34"
-
-      - name: Prepare Android SDK licenses
-        run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
-
-      - name: Install Android Build Tools
-        run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
-
-      - name: Configure Buildozer
-        working-directory: ${{ env.PROJECT_DIR }}
-        run: |
-          echo "===== BUILDOZER SPEC ====="
-          cat buildozer.spec
+          echo "===== buildozer.spec found ====="
 
       - name: Build Debug APK
-  working-directory: ${{ env.PROJECT_DIR }}
-  env:
-    P4A_BUILD_ARGS: "--sdk_dir=$ANDROID_HOME"
-  run: |
-    buildozer -v android debug
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+          echo "===== STARTING BUILD ====="
+          buildozer -v android debug
 
       - name: Find APK
+        shell: bash
         run: |
           echo "===== APK SEARCH ====="
           find "$PROJECT_DIR" -type f -name "*.apk" -print
@@ -99,5 +117,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: MoneyTracker-Debug-APK
-          path: ${{ env.PROJECT_DIR }}/bin/*.apk
+          path: "**/bin/*.apk"
           if-no-files-found: error
