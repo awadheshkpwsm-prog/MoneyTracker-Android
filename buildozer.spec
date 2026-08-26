@@ -20,8 +20,6 @@ android.minapi = 21
 android.ndk = 25b
 android.build_tools_version = 37.0.0
 
-p4a.branch = stable
-
 android.archs = arm64-v8a,armeabi-v7a
 
 android.allow_backup = True
