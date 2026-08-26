@@ -1,11 +1,11 @@
 name: Build MoneyTracker APK
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - main
-  pull_request:
+      - master
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,50 +13,51 @@ permissions:
 env:
   DEBIAN_FRONTEND: noninteractive
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_INPUT: "1"
   PYTHONUNBUFFERED: "1"
-  ANDROID_API: "33"
-  ANDROID_MINAPI: "21"
-  ANDROID_NDK_VERSION: "28c"
-  ANDROID_BUILD_TOOLS_VERSION: "33.0.2"
 
 jobs:
-  build-android:
+  build:
 
     runs-on: ubuntu-22.04
 
     steps:
 
-      # ============================================================
+      # =========================================================
       # CHECKOUT
-      # ============================================================
+      # =========================================================
 
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ============================================================
-      # PYTHON
-      # ============================================================
 
-      - name: Setup Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      # ============================================================
+      # =========================================================
       # JAVA 17
-      # ============================================================
+      # =========================================================
 
       - name: Setup Java 17
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
+          cache: pip
 
-      # ============================================================
+
+      # =========================================================
+      # PYTHON 3.11
+      # =========================================================
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+
+      # =========================================================
       # SYSTEM DEPENDENCIES
-      # ============================================================
+      # =========================================================
 
-      - name: Install Linux dependencies
+      - name: Install system dependencies
         run: |
           set -e
 
@@ -72,94 +73,227 @@ jobs:
             automake \
             libtool \
             pkg-config \
+            zlib1g-dev \
+            libncurses5-dev \
+            libncursesw5-dev \
+            libtinfo5 \
             cmake \
-            ninja-build \
-            ccache \
-            build-essential \
-            libltdl-dev \
             libffi-dev \
-            libssl-dev
+            libssl-dev \
+            liblzma-dev \
+            libreadline-dev \
+            libsqlite3-dev \
+            ccache \
+            build-essential
 
-      # ============================================================
-      # PYTHON BUILD ENVIRONMENT
-      # ============================================================
+
+      # =========================================================
+      # PYTHON BUILD DEPENDENCIES
+      # =========================================================
 
       - name: Install Python build dependencies
         run: |
           set -e
 
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade \
+            "pip<26" \
+            "setuptools<81" \
+            "wheel"
 
           python -m pip install \
-            "cython==0.29.34" \
+            "cython==0.29.34"
+
+          python -m pip install \
             "buildozer==1.6.0"
 
+
+      # =========================================================
+      # SHOW VERSIONS
+      # =========================================================
+
+      - name: Show build environment
+        run: |
+          set -e
+
           echo "=========================================="
-          echo "VERSIONS"
+          echo "BUILD ENVIRONMENT"
           echo "=========================================="
 
           python --version
+          python -m pip --version
           cython --version
           buildozer --version
+          java -version
 
-      # ============================================================
-      # VERIFY PROJECT FILES
-      # ============================================================
-
-      - name: Verify MoneyTracker project
-        run: |
-          set -e
-
+          echo ""
           echo "=========================================="
-          echo "PROJECT CHECK"
+          echo "PROJECT FILES"
           echo "=========================================="
 
           pwd
+          find . -maxdepth 3 -type f | sort | head -300
 
-          echo ""
-          echo "Files:"
-          find . -maxdepth 2 -type f | sort
 
-          echo ""
-          echo "buildozer.spec:"
-          test -f buildozer.spec
+      # =========================================================
+      # VERIFY buildozer.spec
+      # =========================================================
 
-          echo ""
-          echo "main.py:"
-          test -f main.py
-
-          echo ""
-          echo "mt directory:"
-          test -d mt
-
-      # ============================================================
-      # CLEAN OLD BUILDOZER CACHE
-      # ============================================================
-
-      - name: Clean Buildozer cache
+      - name: Verify buildozer.spec
         run: |
           set -e
+
+          SPEC_FILE="buildozer.spec"
+
+          if [ ! -f "$SPEC_FILE" ]; then
+            echo "ERROR: buildozer.spec not found!"
+            exit 1
+          fi
+
+          echo "Using:"
+          echo "$SPEC_FILE"
+
+          echo ""
+          echo "=========================================="
+          echo "BUILD SPEC"
+          echo "=========================================="
+
+          cat "$SPEC_FILE"
+
+
+      # =========================================================
+      # VERIFY MAIN APPLICATION
+      # =========================================================
+
+      - name: Verify MoneyTracker source
+        run: |
+          set -e
+
+          if [ ! -f "main.py" ]; then
+            echo "ERROR: main.py not found!"
+            exit 1
+          fi
+
+          echo "main.py found"
+
+          if [ -d "mt" ]; then
+            echo "mt/ backend found"
+            find mt -maxdepth 2 -type f | sort
+          else
+            echo "WARNING: mt/ directory not found"
+          fi
+
+
+      # =========================================================
+      # CLEAN ALL PREVIOUS BUILD DATA
+      #
+      # IMPORTANT:
+      # This prevents the broken/mixed temporary p4a venv
+      # that caused:
+      #
+      # ImportError:
+      # cannot import name BuildDependencyInstallError
+      #
+      # =========================================================
+
+      - name: Clean Buildozer state
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo "CLEANING BUILD STATE"
+          echo "=========================================="
 
           rm -rf .buildozer
           rm -rf bin
 
+          rm -rf "$HOME/.buildozer"
+
           mkdir -p "$HOME/.buildozer"
 
-      # ============================================================
-      # INSTALL BUILDOZER SDK
+          echo "Buildozer state cleaned."
+
+
+      # =========================================================
+      # CREATE BUILD DIRECTORY
+      # =========================================================
+
+      - name: Prepare Android environment
+        run: |
+          set -e
+
+          mkdir -p "$HOME/.buildozer/android/platform"
+
+          echo "HOME:"
+          echo "$HOME"
+
+          echo ""
+          echo "Buildozer Android platform directory:"
+          echo "$HOME/.buildozer/android/platform"
+
+
+      # =========================================================
+      # PREPARE buildozer.spec
       #
-      # IMPORTANT:
-      # Keep the real SDK layout:
+      # Keep the user's main configuration, but force the
+      # p4a version known to provide AAB support.
+      # =========================================================
+
+      - name: Configure python-for-android
+        run: |
+          set -e
+
+          SPEC_FILE="buildozer.spec"
+
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("buildozer.spec")
+          text = path.read_text()
+
+          lines = text.splitlines()
+
+          # Remove old p4a selectors.
+          filtered = []
+
+          for line in lines:
+              stripped = line.strip()
+
+              if stripped.startswith("p4a.branch"):
+                  continue
+
+              if stripped.startswith("p4a.commit"):
+                  continue
+
+              if stripped.startswith("p4a.url"):
+                  continue
+
+              filtered.append(line)
+
+          # Add a fixed p4a release with AAB support.
+          filtered.append("")
+          filtered.append("# Fixed python-for-android version for reproducible GitHub builds")
+          filtered.append("p4a.url = https://github.com/kivy/python-for-android.git")
+          filtered.append("p4a.commit = 58d21141")
+
+          path.write_text("\n".join(filtered) + "\n")
+          PY
+
+          echo "=========================================="
+          echo "UPDATED buildozer.spec"
+          echo "=========================================="
+
+          cat "$SPEC_FILE"
+
+
+      # =========================================================
+      # INSTALL / VERIFY ANDROID SDK
       #
-      # android-sdk/
-      #   cmdline-tools/
-      #     latest/
-      #
-      # Do NOT copy latest into tools.
-      # ============================================================
+      # Buildozer will use this SDK.
+      # We deliberately do NOT create the broken old
+      # sdkmanager -> tools symlink.
+      # =========================================================
 
       - name: Install Android SDK
-        shell: bash
         run: |
           set -e
 
@@ -181,17 +315,19 @@ jobs:
 
           unzip -q commandlinetools.zip -d cmdline-tools
 
-          mv \
-            cmdline-tools/cmdline-tools \
-            cmdline-tools/latest
-
           rm -f commandlinetools.zip
+
+          if [ ! -d "$SDK/cmdline-tools/cmdline-tools" ]; then
+            echo "ERROR: Android command line tools extraction failed."
+            exit 1
+          fi
+
+          mv \
+            "$SDK/cmdline-tools/cmdline-tools" \
+            "$SDK/cmdline-tools/latest"
 
           chmod +x \
             "$SDK/cmdline-tools/latest/bin/sdkmanager"
-
-          chmod +x \
-            "$SDK/cmdline-tools/latest/bin/avdmanager" || true
 
           touch "$SDK/repositories.cfg"
 
@@ -202,271 +338,141 @@ jobs:
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
 
           echo ""
-          echo "=========================================="
-          echo "SDKMANAGER VERSION"
-          echo "=========================================="
+          echo "Checking sdkmanager..."
 
           "$SDK/cmdline-tools/latest/bin/sdkmanager" \
             --sdk_root="$SDK" \
             --version
 
-      # ============================================================
-      # EXPORT ANDROID VARIABLES
-      # ============================================================
 
-      - name: Configure Android environment
-        shell: bash
+      # =========================================================
+      # INSTALL REQUIRED SDK PACKAGES
+      # =========================================================
+
+      - name: Install Android SDK packages
         run: |
           set -e
 
           SDK="$HOME/.buildozer/android/platform/android-sdk"
 
-          {
-            echo "ANDROID_HOME=$SDK"
-            echo "ANDROID_SDK_ROOT=$SDK"
-            echo "ANDROIDSDK=$SDK"
-            echo "ANDROIDAPI=33"
-            echo "ANDROIDMINAPI=21"
-            echo "ANDROIDNDK=$HOME/.buildozer/android/platform/android-ndk-r28c"
-            echo "$SDK/cmdline-tools/latest/bin"
-            echo "$SDK/platform-tools"
-            echo "$SDK/build-tools/33.0.2"
-          } >> "$GITHUB_PATH"
+          export ANDROID_HOME="$SDK"
+          export ANDROID_SDK_ROOT="$SDK"
 
-          {
-            echo "ANDROID_HOME=$SDK"
-            echo "ANDROID_SDK_ROOT=$SDK"
-            echo "ANDROIDSDK=$SDK"
-            echo "ANDROIDAPI=33"
-            echo "ANDROIDMINAPI=21"
-          } >> "$GITHUB_ENV"
+          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
 
-      # ============================================================
-      # ACCEPT LICENSES
-      # ============================================================
-
-      - name: Accept Android SDK licenses
-        shell: bash
-        run: |
-          set -e
-
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-
-          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" \
+          yes | "$SDKMANAGER" \
             --sdk_root="$SDK" \
-            --licenses > /dev/null || true
+            --licenses >/dev/null || true
 
-      # ============================================================
-      # INSTALL EXACT SDK COMPONENTS
-      # ============================================================
-
-      - name: Install Android SDK components
-        shell: bash
-        run: |
-          set -e
-
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-
-          echo "=========================================="
-          echo "INSTALLING SDK COMPONENTS"
-          echo "=========================================="
-
-          "$SDK/cmdline-tools/latest/bin/sdkmanager" \
+          "$SDKMANAGER" \
             --sdk_root="$SDK" \
             "platform-tools" \
             "platforms;android-33" \
             "build-tools;33.0.2"
 
-      # ============================================================
-      # INSTALL NDK 28c
-      # ============================================================
-
-      - name: Install Android NDK 28c
-        shell: bash
-        run: |
-          set -e
-
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-
+          echo ""
           echo "=========================================="
-          echo "INSTALLING NDK 28c"
+          echo "INSTALLED SDK PACKAGES"
           echo "=========================================="
 
-          "$SDK/cmdline-tools/latest/bin/sdkmanager" \
+          "$SDKMANAGER" \
             --sdk_root="$SDK" \
-            "ndk;28.0.13004108"
+            --list_installed
 
-      # ============================================================
-      # VERIFY SDK
-      # ============================================================
 
-      - name: Verify Android SDK
-        shell: bash
+      # =========================================================
+      # VERIFY AIDL
+      # =========================================================
+
+      - name: Verify Android SDK tools
         run: |
           set -e
 
           SDK="$HOME/.buildozer/android/platform/android-sdk"
+
+          export ANDROID_HOME="$SDK"
+          export ANDROID_SDK_ROOT="$SDK"
 
           echo "=========================================="
           echo "ANDROID SDK VERIFICATION"
           echo "=========================================="
 
-          echo ""
-          echo "ANDROID_HOME:"
-          echo "$ANDROID_HOME"
+          test -x \
+            "$SDK/build-tools/33.0.2/aidl"
 
-          echo ""
-          echo "SDKMANAGER:"
-          "$SDK/cmdline-tools/latest/bin/sdkmanager" \
-            --sdk_root="$SDK" \
-            --version
+          test -x \
+            "$SDK/build-tools/33.0.2/aapt"
 
-          echo ""
-          echo "Installed packages:"
-          "$SDK/cmdline-tools/latest/bin/sdkmanager" \
-            --sdk_root="$SDK" \
-            --list_installed
+          test -x \
+            "$SDK/build-tools/33.0.2/aapt2"
 
-          echo ""
-          echo "Build Tools:"
-          ls -lah "$SDK/build-tools/33.0.2"
+          test -x \
+            "$SDK/platform-tools/adb"
 
           echo ""
           echo "AIDL:"
-          test -x "$SDK/build-tools/33.0.2/aidl"
+          "$SDK/build-tools/33.0.2/aidl" --help >/dev/null
 
-          "$SDK/build-tools/33.0.2/aidl" 2>&1 | head -n 5 || true
-
-          echo ""
-          echo "Platform:"
-          test -d "$SDK/platforms/android-33"
+          echo "AIDL OK"
 
           echo ""
-          echo "NDK:"
-          test -d "$SDK/ndk/28.0.13004108"
+          echo "AAPT:"
+          "$SDK/build-tools/33.0.2/aapt" version
 
           echo ""
-          echo "ANDROID SDK CHECK PASSED"
+          echo "ADB:"
+          "$SDK/platform-tools/adb" version
 
-      # ============================================================
-      # CREATE BUILDOZER SDKMANAGER COMPATIBILITY WRAPPER
-      #
-      # Buildozer/p4a may look for:
-      #
-      # android-sdk/tools/bin/sdkmanager
-      #
-      # But modern Android SDK uses:
-      #
-      # android-sdk/cmdline-tools/latest/bin/sdkmanager
-      #
-      # We keep the real SDK intact and create ONLY a wrapper.
-      # ============================================================
 
-      - name: Create Buildozer SDK compatibility wrapper
-        shell: bash
+      # =========================================================
+      # VERIFY NDK DOWNLOAD TARGET
+      #
+      # p4a currently recommends r28c.
+      # We explicitly install r28c so Buildozer does not
+      # fall back to an old NDK.
+      # =========================================================
+
+      - name: Install Android NDK r28c
         run: |
           set -e
 
           SDK="$HOME/.buildozer/android/platform/android-sdk"
 
+          export ANDROID_HOME="$SDK"
+          export ANDROID_SDK_ROOT="$SDK"
+
+          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+
           echo "=========================================="
-          echo "CREATING BUILDOZER SDK WRAPPER"
+          echo "INSTALLING ANDROID NDK r28c"
           echo "=========================================="
 
-          rm -rf "$SDK/tools"
-
-          mkdir -p "$SDK/tools/bin"
-
-          cat > "$SDK/tools/bin/sdkmanager" <<'EOF'
-          #!/usr/bin/env bash
-
-          set -e
-
-          SDK="$(cd "$(dirname "$0")/../.." && pwd)"
-
-          exec "$SDK/cmdline-tools/latest/bin/sdkmanager" \
+          "$SDKMANAGER" \
             --sdk_root="$SDK" \
-            "$@"
-          EOF
-
-          chmod +x "$SDK/tools/bin/sdkmanager"
+            "ndk;28.2.13676358"
 
           echo ""
-          echo "Compatibility sdkmanager:"
-          "$SDK/tools/bin/sdkmanager" --version
+          echo "NDK directories:"
+
+          ls -lah "$SDK/ndk"
+
+          if [ ! -d "$SDK/ndk/28.2.13676358" ]; then
+            echo "ERROR: NDK r28c was not installed."
+            exit 1
+          fi
 
           echo ""
-          echo "Compatibility path created successfully."
+          echo "NDK r28c verified."
 
-      # ============================================================
-      # INSTALL / PIN PYTHON-FOR-ANDROID
-      # ============================================================
 
-      - name: Prepare python-for-android
-        shell: bash
-        run: |
-          set -e
-
-          echo "=========================================="
-          echo "PYTHON-FOR-ANDROID"
-          echo "=========================================="
-
-          python -m pip install \
-            "appdirs" \
-            "colorama>=0.3.3" \
-            "jinja2" \
-            "sh>=2,<3.0" \
-            "meson" \
-            "ninja" \
-            "build" \
-            "toml" \
-            "packaging" \
-            "setuptools" \
-            "wheel"
-
-      # ============================================================
-      # BUILDOZER PRECHECK
-      # ============================================================
-
-      - name: Buildozer precheck
-        shell: bash
-        run: |
-          set -e
-
-          echo "=========================================="
-          echo "BUILDOZER PRECHECK"
-          echo "=========================================="
-
-          echo ""
-          echo "Python:"
-          python --version
-
-          echo ""
-          echo "Cython:"
-          cython --version
-
-          echo ""
-          echo "Buildozer:"
-          buildozer --version
-
-          echo ""
-          echo "Java:"
-          java -version
-
-          echo ""
-          echo "SDK:"
-          echo "$ANDROID_HOME"
-
-          echo ""
-          echo "Spec:"
-          sed -n '1,220p' buildozer.spec
-
-      # ============================================================
+      # =========================================================
       # BUILD APK
-      # ============================================================
+      # =========================================================
 
       - name: Build MoneyTracker APK
-        shell: bash
+        env:
+          ANDROID_HOME: /home/runner/.buildozer/android/platform/android-sdk
+          ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
         run: |
           set -e
 
@@ -479,37 +485,48 @@ jobs:
           echo "$ANDROID_HOME"
 
           echo ""
-          echo "Android API:"
-          echo "$ANDROIDAPI"
+          echo "Java:"
+          java -version
 
           echo ""
-          echo "Android minimum API:"
-          echo "$ANDROIDMINAPI"
+          echo "Python:"
+          python --version
+
+          echo ""
+          echo "Buildozer:"
+          buildozer --version
 
           echo ""
           echo "Starting Buildozer..."
 
           buildozer -v android debug
 
-      # ============================================================
-      # SHOW APK
-      # ============================================================
 
-      - name: Find APK
+      # =========================================================
+      # SEARCH APK
+      # =========================================================
+
+      - name: Search APK
         if: always()
-        shell: bash
         run: |
           echo "=========================================="
           echo "APK SEARCH"
           echo "=========================================="
 
-          find . -type f \
-            \( -name "*.apk" -o -name "*.aab" \) \
-            -print || true
+          echo ""
+          echo "APK files:"
 
-      # ============================================================
+          find . \
+            -type f \
+            \( -name "*.apk" -o -name "*.aab" \) \
+            -print \
+            -exec ls -lh {} \; \
+            || true
+
+
+      # =========================================================
       # UPLOAD APK
-      # ============================================================
+      # =========================================================
 
       - name: Upload APK artifact
         if: success()
@@ -518,4 +535,19 @@ jobs:
           name: MoneyTracker-APK
           path: |
             bin/*.apk
+            .buildozer/**/*.apk
           if-no-files-found: error
+
+
+      # =========================================================
+      # UPLOAD BUILD LOGS IF FAILED
+      # =========================================================
+
+      - name: Upload Buildozer logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MoneyTracker-build-logs
+          path: |
+            .buildozer/
+          if-no-files-found: warn
