@@ -15,14 +15,18 @@ orientation = portrait
 
 fullscreen = 0
 
-aandroid.api = 33
+android.api = 35
 android.minapi = 21
 android.ndk = 25b
-android.build_tools_version = 33.0.2
+android.build_tools_version = 37.0.0
+
 p4a.branch = stable
 
 android.archs = arm64-v8a,armeabi-v7a
 
+android.allow_backup = True
+
 [buildozer]
+
 log_level = 2
 warn_on_root = 1
