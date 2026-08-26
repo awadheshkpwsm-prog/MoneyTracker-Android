@@ -40,7 +40,6 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-          cache: pip
 
 
       # =========================================================
@@ -51,6 +50,7 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+          cache: pip
 
 
       # =========================================================
@@ -98,7 +98,7 @@ jobs:
           python -m pip install --upgrade \
             "pip<26" \
             "setuptools<81" \
-            "wheel"
+            wheel
 
           python -m pip install \
             "cython==0.29.34"
@@ -119,49 +119,49 @@ jobs:
           echo "BUILD ENVIRONMENT"
           echo "=========================================="
 
+          echo ""
+          echo "Python:"
           python --version
-          python -m pip --version
-          cython --version
-          buildozer --version
-          java -version
 
           echo ""
-          echo "=========================================="
-          echo "PROJECT FILES"
-          echo "=========================================="
+          echo "Pip:"
+          python -m pip --version
 
-          pwd
-          find . -maxdepth 3 -type f | sort | head -300
+          echo ""
+          echo "Cython:"
+          cython --version
+
+          echo ""
+          echo "Buildozer:"
+          buildozer --version
+
+          echo ""
+          echo "Java:"
+          java -version
 
 
       # =========================================================
-      # VERIFY buildozer.spec
+      # VERIFY BUILD SPEC
       # =========================================================
 
       - name: Verify buildozer.spec
         run: |
           set -e
 
-          SPEC_FILE="buildozer.spec"
-
-          if [ ! -f "$SPEC_FILE" ]; then
+          if [ ! -f "buildozer.spec" ]; then
             echo "ERROR: buildozer.spec not found!"
             exit 1
           fi
 
-          echo "Using:"
-          echo "$SPEC_FILE"
-
-          echo ""
           echo "=========================================="
           echo "BUILD SPEC"
           echo "=========================================="
 
-          cat "$SPEC_FILE"
+          cat buildozer.spec
 
 
       # =========================================================
-      # VERIFY MAIN APPLICATION
+      # VERIFY SOURCE
       # =========================================================
 
       - name: Verify MoneyTracker source
@@ -173,26 +173,21 @@ jobs:
             exit 1
           fi
 
-          echo "main.py found"
+          echo "main.py found."
 
           if [ -d "mt" ]; then
-            echo "mt/ backend found"
+            echo "mt/ backend found."
             find mt -maxdepth 2 -type f | sort
           else
-            echo "WARNING: mt/ directory not found"
+            echo "WARNING: mt/ directory not found."
           fi
 
 
       # =========================================================
-      # CLEAN ALL PREVIOUS BUILD DATA
+      # CLEAN OLD BUILD DATA
       #
-      # IMPORTANT:
-      # This prevents the broken/mixed temporary p4a venv
-      # that caused:
-      #
-      # ImportError:
-      # cannot import name BuildDependencyInstallError
-      #
+      # Prevents old broken p4a/pip virtual environments
+      # from being reused.
       # =========================================================
 
       - name: Clean Buildozer state
@@ -200,97 +195,25 @@ jobs:
           set -e
 
           echo "=========================================="
-          echo "CLEANING BUILD STATE"
+          echo "CLEANING OLD BUILDOZER STATE"
           echo "=========================================="
 
           rm -rf .buildozer
           rm -rf bin
-
           rm -rf "$HOME/.buildozer"
 
           mkdir -p "$HOME/.buildozer"
 
-          echo "Buildozer state cleaned."
+          echo "Old build state removed."
 
 
       # =========================================================
-      # CREATE BUILD DIRECTORY
-      # =========================================================
-
-      - name: Prepare Android environment
-        run: |
-          set -e
-
-          mkdir -p "$HOME/.buildozer/android/platform"
-
-          echo "HOME:"
-          echo "$HOME"
-
-          echo ""
-          echo "Buildozer Android platform directory:"
-          echo "$HOME/.buildozer/android/platform"
-
-
-      # =========================================================
-      # PREPARE buildozer.spec
+      # ANDROID SDK
       #
-      # Keep the user's main configuration, but force the
-      # p4a version known to provide AAB support.
-      # =========================================================
-
-      - name: Configure python-for-android
-        run: |
-          set -e
-
-          SPEC_FILE="buildozer.spec"
-
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path("buildozer.spec")
-          text = path.read_text()
-
-          lines = text.splitlines()
-
-          # Remove old p4a selectors.
-          filtered = []
-
-          for line in lines:
-              stripped = line.strip()
-
-              if stripped.startswith("p4a.branch"):
-                  continue
-
-              if stripped.startswith("p4a.commit"):
-                  continue
-
-              if stripped.startswith("p4a.url"):
-                  continue
-
-              filtered.append(line)
-
-          # Add a fixed p4a release with AAB support.
-          filtered.append("")
-          filtered.append("# Fixed python-for-android version for reproducible GitHub builds")
-          filtered.append("p4a.url = https://github.com/kivy/python-for-android.git")
-          filtered.append("p4a.commit = 58d21141")
-
-          path.write_text("\n".join(filtered) + "\n")
-          PY
-
-          echo "=========================================="
-          echo "UPDATED buildozer.spec"
-          echo "=========================================="
-
-          cat "$SPEC_FILE"
-
-
-      # =========================================================
-      # INSTALL / VERIFY ANDROID SDK
-      #
-      # Buildozer will use this SDK.
-      # We deliberately do NOT create the broken old
-      # sdkmanager -> tools symlink.
+      # IMPORTANT:
+      # Do NOT create the old tools/bin sdkmanager symlink.
+      # Buildozer compatibility is handled through the actual
+      # cmdline-tools/latest installation.
       # =========================================================
 
       - name: Install Android SDK
@@ -318,7 +241,7 @@ jobs:
           rm -f commandlinetools.zip
 
           if [ ! -d "$SDK/cmdline-tools/cmdline-tools" ]; then
-            echo "ERROR: Android command line tools extraction failed."
+            echo "ERROR: Android command line tools were not extracted correctly."
             exit 1
           fi
 
@@ -346,7 +269,7 @@ jobs:
 
 
       # =========================================================
-      # INSTALL REQUIRED SDK PACKAGES
+      # ANDROID SDK PACKAGES
       # =========================================================
 
       - name: Install Android SDK packages
@@ -360,9 +283,18 @@ jobs:
 
           SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
 
+          echo "=========================================="
+          echo "ACCEPTING ANDROID LICENSES"
+          echo "=========================================="
+
           yes | "$SDKMANAGER" \
             --sdk_root="$SDK" \
             --licenses >/dev/null || true
+
+          echo ""
+          echo "=========================================="
+          echo "INSTALLING SDK PACKAGES"
+          echo "=========================================="
 
           "$SDKMANAGER" \
             --sdk_root="$SDK" \
@@ -370,21 +302,12 @@ jobs:
             "platforms;android-33" \
             "build-tools;33.0.2"
 
-          echo ""
-          echo "=========================================="
-          echo "INSTALLED SDK PACKAGES"
-          echo "=========================================="
-
-          "$SDKMANAGER" \
-            --sdk_root="$SDK" \
-            --list_installed
-
 
       # =========================================================
-      # VERIFY AIDL
+      # VERIFY SDK
       # =========================================================
 
-      - name: Verify Android SDK tools
+      - name: Verify Android SDK
         run: |
           set -e
 
@@ -397,39 +320,45 @@ jobs:
           echo "ANDROID SDK VERIFICATION"
           echo "=========================================="
 
-          test -x \
-            "$SDK/build-tools/33.0.2/aidl"
-
-          test -x \
-            "$SDK/build-tools/33.0.2/aapt"
-
-          test -x \
-            "$SDK/build-tools/33.0.2/aapt2"
-
-          test -x \
-            "$SDK/platform-tools/adb"
+          echo ""
+          echo "SDK:"
+          echo "$SDK"
 
           echo ""
-          echo "AIDL:"
+          echo "Installed packages:"
+
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" \
+            --sdk_root="$SDK" \
+            --list_installed
+
+          echo ""
+          echo "Checking AIDL..."
+
+          test -x "$SDK/build-tools/33.0.2/aidl"
+
           "$SDK/build-tools/33.0.2/aidl" --help >/dev/null
 
           echo "AIDL OK"
 
           echo ""
-          echo "AAPT:"
+          echo "Checking AAPT..."
+
+          test -x "$SDK/build-tools/33.0.2/aapt"
+
           "$SDK/build-tools/33.0.2/aapt" version
 
           echo ""
-          echo "ADB:"
+          echo "Checking ADB..."
+
+          test -x "$SDK/platform-tools/adb"
+
           "$SDK/platform-tools/adb" version
 
 
       # =========================================================
-      # VERIFY NDK DOWNLOAD TARGET
+      # INSTALL NDK r28c
       #
-      # p4a currently recommends r28c.
-      # We explicitly install r28c so Buildozer does not
-      # fall back to an old NDK.
+      # r28c = Android NDK 28.2.13676358
       # =========================================================
 
       - name: Install Android NDK r28c
@@ -452,7 +381,7 @@ jobs:
             "ndk;28.2.13676358"
 
           echo ""
-          echo "NDK directories:"
+          echo "Installed NDK directories:"
 
           ls -lah "$SDK/ndk"
 
@@ -463,6 +392,29 @@ jobs:
 
           echo ""
           echo "NDK r28c verified."
+
+
+      # =========================================================
+      # CONFIGURE BUILD
+      #
+      # Use the p4a version selected by buildozer.spec.
+      # =========================================================
+
+      - name: Configure Buildozer
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo "BUILDOZER CONFIGURATION"
+          echo "=========================================="
+
+          echo ""
+          echo "Buildozer version:"
+          buildozer --version
+
+          echo ""
+          echo "buildozer.spec:"
+          cat buildozer.spec
 
 
       # =========================================================
@@ -485,16 +437,24 @@ jobs:
           echo "$ANDROID_HOME"
 
           echo ""
-          echo "Java:"
-          java -version
-
-          echo ""
           echo "Python:"
           python --version
 
           echo ""
+          echo "Pip:"
+          python -m pip --version
+
+          echo ""
+          echo "Cython:"
+          cython --version
+
+          echo ""
           echo "Buildozer:"
           buildozer --version
+
+          echo ""
+          echo "Java:"
+          java -version
 
           echo ""
           echo "Starting Buildozer..."
@@ -503,7 +463,7 @@ jobs:
 
 
       # =========================================================
-      # SEARCH APK
+      # SEARCH FOR APK
       # =========================================================
 
       - name: Search APK
@@ -514,7 +474,7 @@ jobs:
           echo "=========================================="
 
           echo ""
-          echo "APK files:"
+          echo "Searching for APK/AAB files..."
 
           find . \
             -type f \
@@ -540,7 +500,7 @@ jobs:
 
 
       # =========================================================
-      # UPLOAD BUILD LOGS IF FAILED
+      # SAVE BUILD LOGS IF BUILD FAILS
       # =========================================================
 
       - name: Upload Buildozer logs
