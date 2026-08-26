@@ -19,6 +19,7 @@ jobs:
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
       PIP_NO_INPUT: "1"
       PYTHONUNBUFFERED: "1"
+      PIP_NO_CACHE_DIR: "1"
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
     steps:
@@ -32,13 +33,15 @@ jobs:
 
       # ==========================================================
       # JAVA 17
+      # IMPORTANT:
+      # No Gradle cache because this is a Buildozer project.
       # ==========================================================
       - name: Setup Java 17
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
-          cache: gradle
+          check-latest: false
 
 
       # ==========================================================
@@ -96,6 +99,10 @@ jobs:
         run: |
           set -euxo pipefail
 
+          echo "=========================================="
+          echo "INSTALLING PYTHON BUILD TOOLS"
+          echo "=========================================="
+
           python --version
           python -m pip --version
 
@@ -110,7 +117,7 @@ jobs:
 
 
       # ==========================================================
-      # VERIFY PYTHON / BUILDOZER
+      # VERIFY PYTHON / CYTHON / BUILDOZER
       # ==========================================================
       - name: Verify Python build environment
         shell: bash
@@ -148,7 +155,7 @@ jobs:
 
 
       # ==========================================================
-      # ANDROID SDK
+      # INSTALL ANDROID SDK
       # ==========================================================
       - name: Install Android SDK
         shell: bash
@@ -182,7 +189,10 @@ jobs:
             "$SDK/cmdline-tools/cmdline-tools" \
             "$SDK/cmdline-tools/latest"
 
+          # ------------------------------------------------------
           # Buildozer compatibility path
+          # ------------------------------------------------------
+
           rm -rf "$SDK/tools"
 
           mkdir -p "$SDK/tools"
@@ -221,7 +231,7 @@ jobs:
 
 
       # ==========================================================
-      # ACCEPT LICENSES
+      # ACCEPT ANDROID LICENSES
       # ==========================================================
       - name: Accept Android SDK licenses
         shell: bash
@@ -236,7 +246,7 @@ jobs:
 
 
       # ==========================================================
-      # INSTALL SDK PACKAGES
+      # INSTALL ANDROID SDK PACKAGES
       # ==========================================================
       - name: Install Android SDK packages
         shell: bash
@@ -286,14 +296,21 @@ jobs:
             --list_installed || true
 
           echo ""
-          echo "Build Tools 33.0.2:"
+          echo "Checking Android 33 platform:"
+
+          test -d "$SDK/platforms/android-33"
+
+          echo "Android 33 platform OK"
+
+          echo ""
+          echo "Checking Build Tools 33.0.2:"
 
           test -d "$SDK/build-tools/33.0.2"
 
           ls -lah "$SDK/build-tools/33.0.2"
 
           echo ""
-          echo "AIDL:"
+          echo "Checking AIDL:"
 
           test -x "$SDK/build-tools/33.0.2/aidl"
 
@@ -303,21 +320,21 @@ jobs:
           echo "AIDL OK"
 
           echo ""
-          echo "AAPT2:"
+          echo "Checking AAPT2:"
 
           test -x "$SDK/build-tools/33.0.2/aapt2"
 
           echo "AAPT2 OK"
 
           echo ""
-          echo "D8:"
+          echo "Checking D8:"
 
           test -x "$SDK/build-tools/33.0.2/d8"
 
           echo "D8 OK"
 
           echo ""
-          echo "ZIPALIGN:"
+          echo "Checking ZIPALIGN:"
 
           test -x "$SDK/build-tools/33.0.2/zipalign"
 
@@ -337,18 +354,21 @@ jobs:
           echo "ANDROIDAPI=33" >> "$GITHUB_ENV"
           echo "ANDROIDMINAPI=21" >> "$GITHUB_ENV"
 
-          # Keep Buildozer/p4a on NDK r28c.
+          # ------------------------------------------------------
+          # Use Android NDK r28c with Buildozer/p4a
+          # ------------------------------------------------------
+
           echo "ANDROIDNDK=28c" >> "$GITHUB_ENV"
 
-          # Prevent runner-installed NDK 27 from taking precedence.
           echo "ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-ndk-r28c" >> "$GITHUB_ENV"
+
           echo "ANDROID_NDK_ROOT=$HOME/.buildozer/android/platform/android-ndk-r28c" >> "$GITHUB_ENV"
 
           echo "PATH=$SDK/cmdline-tools/latest/bin:$SDK/tools/bin:$SDK/platform-tools:$SDK/build-tools/33.0.2:$PATH" >> "$GITHUB_ENV"
 
 
       # ==========================================================
-      # PROJECT CHECK
+      # VERIFY MONEYTRACKER PROJECT
       # ==========================================================
       - name: Verify MoneyTracker project
         shell: bash
@@ -356,7 +376,7 @@ jobs:
           set -euxo pipefail
 
           echo "=========================================="
-          echo "MONEYTRACKER PROJECT"
+          echo "MONEYTRACKER PROJECT CHECK"
           echo "=========================================="
 
           echo ""
@@ -369,30 +389,38 @@ jobs:
 
           echo ""
           echo "Checking buildozer.spec:"
+
           test -f buildozer.spec
+
           echo "buildozer.spec FOUND"
 
           echo ""
           echo "Checking main.py:"
+
           test -f main.py
+
           echo "main.py FOUND"
 
           echo ""
           echo "Checking mt directory:"
+
           test -d mt
+
           echo "mt directory FOUND"
 
           echo ""
-          echo "buildozer.spec:"
+          echo "=========================================="
+          echo "BUILDOZER.SPEC"
+          echo "=========================================="
+
           cat buildozer.spec
 
 
       # ==========================================================
-      # IMPORTANT:
-      # REMOVE ALL OLD BUILDOZER / P4A BUILD STATE
+      # CLEAN OLD BUILDOZER / P4A STATE
       #
-      # This is the main fix for the stale internal venv/pip
-      # ImportError seen in the previous build.
+      # IMPORTANT FIX:
+      # Removes stale internal venv/pip state.
       # ==========================================================
       - name: Clean Buildozer and p4a build state
         shell: bash
@@ -400,7 +428,7 @@ jobs:
           set -euxo pipefail
 
           echo "=========================================="
-          echo "CLEANING OLD BUILD STATE"
+          echo "CLEANING BUILDOZER BUILD STATE"
           echo "=========================================="
 
           rm -rf .buildozer
@@ -409,14 +437,20 @@ jobs:
           mkdir -p .buildozer
 
           echo ""
-          echo "Clean build directories created."
+          echo "Buildozer directory cleaned."
 
           echo ""
-          echo "Verifying no stale internal venv exists:"
+          echo "Checking for stale virtual environments:"
 
-          if find .buildozer -type d -name "venv" -print -quit | grep -q .; then
-            echo "ERROR: stale venv still exists"
+          if find .buildozer \
+            -type d \
+            -name "venv" \
+            -print \
+            -quit | grep -q .; then
+
+            echo "ERROR: stale venv still exists!"
             exit 1
+
           fi
 
           echo "No stale venv found."
@@ -431,7 +465,7 @@ jobs:
           set -euxo pipefail
 
           echo "=========================================="
-          echo "PREFLIGHT"
+          echo "FINAL PREFLIGHT CHECK"
           echo "=========================================="
 
           echo ""
@@ -442,6 +476,10 @@ jobs:
           echo ""
           echo "Pip:"
           python -m pip --version
+
+          echo ""
+          echo "Cython:"
+          cython --version
 
           echo ""
           echo "Buildozer:"
@@ -480,16 +518,28 @@ jobs:
           echo "$ANDROID_NDK_ROOT"
 
           echo ""
-          echo "SDK platform:"
+          echo "Checking Android platform:"
           test -d "$ANDROID_HOME/platforms/android-33"
 
-          echo ""
-          echo "SDK build-tools:"
-          test -d "$ANDROID_HOME/build-tools/33.0.2"
+          echo "Android platform OK"
 
           echo ""
-          echo "AIDL:"
+          echo "Checking Build Tools:"
+          test -d "$ANDROID_HOME/build-tools/33.0.2"
+
+          echo "Build Tools OK"
+
+          echo ""
+          echo "Checking AIDL:"
           test -x "$ANDROID_HOME/build-tools/33.0.2/aidl"
+
+          echo "AIDL OK"
+
+          echo ""
+          echo "Checking Java:"
+          test -n "$JAVA_HOME"
+
+          echo "JAVA_HOME=$JAVA_HOME"
 
           echo ""
           echo "PATH:"
@@ -497,12 +547,11 @@ jobs:
 
 
       # ==========================================================
-      # BUILD
+      # BUILD APK
       # ==========================================================
       - name: Build MoneyTracker APK
         shell: bash
         env:
-          # Make sure Buildozer/p4a starts with no stale pip cache.
           PIP_NO_CACHE_DIR: "1"
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
           PIP_NO_INPUT: "1"
@@ -526,12 +575,20 @@ jobs:
           echo "$ANDROIDAPI"
 
           echo ""
-          echo "Android Min API:"
+          echo "Android Minimum API:"
           echo "$ANDROIDMINAPI"
 
           echo ""
           echo "Android NDK:"
           echo "$ANDROIDNDK"
+
+          echo ""
+          echo "Android SDK:"
+          echo "$ANDROID_HOME"
+
+          echo ""
+          echo "Java:"
+          java -version
 
           echo ""
           echo "Starting clean Buildozer build..."
@@ -540,7 +597,7 @@ jobs:
 
 
       # ==========================================================
-      # SEARCH APK
+      # SEARCH APK / AAB
       # ==========================================================
       - name: Search for APK
         if: always()
