@@ -21,7 +21,7 @@ jobs:
     steps:
 
       # ============================================================
-      # 1. CHECKOUT
+      # 1. CHECKOUT REPOSITORY
       # ============================================================
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -71,7 +71,7 @@ jobs:
             build-essential
 
       # ============================================================
-      # 5. ANDROID COMMAND LINE TOOLS
+      # 5. INSTALL ANDROID COMMAND LINE TOOLS
       # ============================================================
       - name: Install Android SDK command line tools
         shell: bash
@@ -104,7 +104,7 @@ jobs:
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
 
       # ============================================================
-      # 6. ACCEPT LICENSES
+      # 6. ACCEPT ANDROID LICENSES
       # ============================================================
       - name: Accept Android SDK licenses
         shell: bash
@@ -130,7 +130,7 @@ jobs:
             "build-tools;33.0.2"
 
       # ============================================================
-      # 8. VERIFY SDK / AIDL
+      # 8. VERIFY ANDROID SDK AND AIDL
       # ============================================================
       - name: Verify Android SDK and AIDL
         shell: bash
@@ -164,12 +164,12 @@ jobs:
           ls -lah "$ANDROID_HOME/build-tools/33.0.2"
 
           echo ""
-          echo "Checking AIDL:"
+          echo "Checking AIDL executable:"
           test -x "$ANDROID_HOME/build-tools/33.0.2/aidl"
 
           echo ""
-          echo "AIDL version:"
-          "$ANDROID_HOME/build-tools/33.0.2/aidl" --version
+          echo "AIDL executable found:"
+          ls -lh "$ANDROID_HOME/build-tools/33.0.2/aidl"
 
           echo ""
           echo "Java version:"
@@ -180,7 +180,7 @@ jobs:
           python --version
 
       # ============================================================
-      # 9. INSTALL BUILDOZER + CYTHON
+      # 9. INSTALL BUILDOZER AND CYTHON
       # ============================================================
       - name: Install Buildozer and Cython
         shell: bash
@@ -194,11 +194,11 @@ jobs:
             "cython==0.29.36"
 
           echo ""
-          echo "Buildozer:"
+          echo "Buildozer version:"
           buildozer --version
 
           echo ""
-          echo "Cython:"
+          echo "Cython version:"
           cython --version
 
       # ============================================================
@@ -267,7 +267,7 @@ jobs:
           rm -rf bin
 
       # ============================================================
-      # 13. BUILD APK
+      # 13. BUILD ANDROID APK
       # ============================================================
       - name: Build Android APK
         shell: bash
@@ -285,8 +285,9 @@ jobs:
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
 
           echo ""
-          echo "Checking AIDL before Buildozer:"
-          "$ANDROID_HOME/build-tools/33.0.2/aidl" --version
+          echo "Checking AIDL executable before Buildozer:"
+          test -x "$ANDROID_HOME/build-tools/33.0.2/aidl"
+          ls -lh "$ANDROID_HOME/build-tools/33.0.2/aidl"
 
           echo ""
           echo "Starting Buildozer..."
@@ -294,7 +295,7 @@ jobs:
           buildozer -v android debug
 
       # ============================================================
-      # 14. FIND APK
+      # 14. FIND GENERATED APK
       # ============================================================
       - name: Find generated APK
         if: always()
