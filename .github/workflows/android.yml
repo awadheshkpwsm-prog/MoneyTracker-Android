@@ -28,11 +28,10 @@ jobs:
       # JAVA 17
       # ============================================================
       - name: Setup Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
-          cache: pip
 
 
       # ============================================================
@@ -45,7 +44,7 @@ jobs:
 
 
       # ============================================================
-      # INSTALL LINUX DEPENDENCIES
+      # SYSTEM DEPENDENCIES
       # ============================================================
       - name: Install system dependencies
         run: |
@@ -55,6 +54,8 @@ jobs:
 
           sudo apt-get install -y \
             git \
+            wget \
+            curl \
             zip \
             unzip \
             autoconf \
@@ -69,7 +70,7 @@ jobs:
 
 
       # ============================================================
-      # INSTALL PYTHON BUILD TOOLS
+      # PYTHON BUILD TOOLS
       # ============================================================
       - name: Install Buildozer and Cython
         run: |
@@ -83,7 +84,7 @@ jobs:
 
 
       # ============================================================
-      # SHOW ENVIRONMENT
+      # SHOW VERSIONS
       # ============================================================
       - name: Show build environment
         run: |
@@ -93,17 +94,30 @@ jobs:
           echo "BUILD ENVIRONMENT"
           echo "=========================================="
 
+          echo "Python:"
           python --version
+
+          echo ""
+          echo "Pip:"
           pip --version
+
+          echo ""
+          echo "Buildozer:"
           buildozer --version
+
+          echo ""
+          echo "Cython:"
           cython --version
+
+          echo ""
+          echo "Java:"
           java -version
 
           echo "=========================================="
 
 
       # ============================================================
-      # PREPARE BUILD DIRECTORY
+      # PREPARE BUILDOZER DIRECTORY
       # ============================================================
       - name: Prepare Buildozer directory
         run: |
@@ -115,15 +129,13 @@ jobs:
 
 
       # ============================================================
-      # PRE-INSTALL ANDROID SDK
+      # INSTALL ANDROID SDK
       #
-      # IMPORTANT:
-      # Buildozer 1.5 expects:
+      # Buildozer 1.5 searches for:
       #
       # android-sdk/tools/bin/sdkmanager
       #
-      # Therefore we deliberately create the legacy-compatible
-      # tools/bin structure.
+      # Therefore we create a REAL compatibility directory.
       # ============================================================
       - name: Install Android SDK
         run: |
@@ -156,11 +168,7 @@ jobs:
           rm -f commandlinetools.zip
 
           # --------------------------------------------------------
-          # Buildozer compatibility:
-          # Buildozer looks for tools/bin/sdkmanager.
-          #
-          # DO NOT use a symlink here because sdkmanager resolves
-          # its own libraries relative to its real installation.
+          # Buildozer compatibility path
           # --------------------------------------------------------
 
           rm -rf "$SDK/tools"
@@ -181,9 +189,8 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
 
-          echo "=========================================="
-          echo "SDKMANAGER CHECK"
-          echo "=========================================="
+          echo ""
+          echo "Checking sdkmanager..."
 
           test -x "$SDK/tools/bin/sdkmanager"
 
@@ -191,7 +198,7 @@ jobs:
 
 
       # ============================================================
-      # ACCEPT ANDROID LICENSES
+      # ACCEPT LICENSES
       # ============================================================
       - name: Accept Android licenses
         run: |
@@ -208,7 +215,7 @@ jobs:
 
 
       # ============================================================
-      # INSTALL EXACT ANDROID PACKAGES
+      # INSTALL ANDROID PACKAGES
       # ============================================================
       - name: Install Android SDK packages
         run: |
@@ -250,6 +257,7 @@ jobs:
           echo "ANDROID SDK VERIFICATION"
           echo "=========================================="
 
+          echo ""
           echo "ANDROID_HOME:"
           echo "$ANDROID_HOME"
 
@@ -258,17 +266,17 @@ jobs:
           echo "$ANDROID_SDK_ROOT"
 
           echo ""
-          echo "sdkmanager:"
+          echo "SDK Manager:"
           "$SDK/tools/bin/sdkmanager" --version
 
           echo ""
-          echo "Installed packages:"
+          echo "Installed SDK packages:"
           "$SDK/tools/bin/sdkmanager" \
             --sdk_root="$SDK" \
             --list_installed || true
 
           echo ""
-          echo "Build tools:"
+          echo "Build Tools:"
           ls -lah "$SDK/build-tools"
 
           echo ""
@@ -276,23 +284,23 @@ jobs:
           ls -lah "$SDK/build-tools/33.0.2"
 
           echo ""
-          echo "AIDL:"
+          echo "Checking AIDL:"
           test -x "$SDK/build-tools/33.0.2/aidl"
 
-          echo "AIDL exists and is executable."
+          echo "AIDL found."
 
           echo ""
-          echo "Platform:"
+          echo "Checking Android platform:"
           test -d "$SDK/platforms/android-33"
 
-          echo "Android 33 platform exists."
+          echo "Android 33 platform found."
 
           echo ""
-          echo "SDK verification complete."
+          echo "SDK verification completed successfully."
 
 
       # ============================================================
-      # CREATE ENVIRONMENT FILE FOR BUILDOZER
+      # EXPORT ANDROID ENVIRONMENT
       # ============================================================
       - name: Configure Android environment
         run: |
@@ -308,7 +316,7 @@ jobs:
 
 
       # ============================================================
-      # VERIFY BUILD CONFIGURATION
+      # VERIFY MONEYTRACKER PROJECT
       # ============================================================
       - name: Verify MoneyTracker project
         run: |
@@ -318,12 +326,9 @@ jobs:
           echo "MONEYTRACKER PROJECT CHECK"
           echo "=========================================="
 
+          echo ""
           echo "Current directory:"
           pwd
-
-          echo ""
-          echo "Repository:"
-          find . -maxdepth 2 -type f | sort
 
           echo ""
           echo "buildozer.spec:"
@@ -344,7 +349,7 @@ jobs:
           echo "mt directory found."
 
           echo ""
-          echo "mt files:"
+          echo "MT files:"
           find mt -maxdepth 2 -type f | sort
 
 
@@ -358,11 +363,11 @@ jobs:
           rm -rf .buildozer
           rm -rf bin
 
-          echo "Old Buildozer files removed."
+          echo "Previous Buildozer output cleaned."
 
 
       # ============================================================
-      # RECREATE SDK ENVIRONMENT AFTER CLEAN
+      # RESTORE ANDROID ENVIRONMENT
       # ============================================================
       - name: Restore Android environment
         run: |
@@ -415,7 +420,7 @@ jobs:
           echo "=========================================="
 
           echo ""
-          echo "APK files:"
+          echo "APK/AAB files:"
 
           find . \
             -type f \
