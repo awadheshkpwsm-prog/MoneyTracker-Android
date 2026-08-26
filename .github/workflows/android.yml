@@ -79,7 +79,7 @@ jobs:
 
 
       # ==========================================================
-      # 5. INSTALL BUILDOZER
+      # 5. INSTALL BUILDOZER + CYTHON
       # ==========================================================
 
       - name: Install Buildozer and Cython
@@ -94,19 +94,21 @@ jobs:
             "cython==0.29.34"
 
           echo "=========================================="
-          echo "BUILDOZER"
+          echo "BUILDOZER VERSION"
           echo "=========================================="
 
           buildozer --version
 
           echo ""
-          echo "CYTHON"
+          echo "=========================================="
+          echo "CYTHON VERSION"
+          echo "=========================================="
 
           cython --version
 
 
       # ==========================================================
-      # 6. VERIFY PROJECT
+      # 6. VERIFY MONEYTRACKER PROJECT
       # ==========================================================
 
       - name: Verify MoneyTracker project
@@ -123,7 +125,7 @@ jobs:
           pwd
 
           echo ""
-          echo "Root:"
+          echo "Root files:"
           ls -lah
 
           echo ""
@@ -131,15 +133,21 @@ jobs:
 
           test -f buildozer.spec
 
+          echo "buildozer.spec OK"
+
           echo ""
           echo "Checking main.py..."
 
           test -f main.py
 
+          echo "main.py OK"
+
           echo ""
-          echo "Checking mt directory..."
+          echo "Checking mt folder..."
 
           test -d mt
+
+          echo "mt folder OK"
 
           echo ""
           echo "MT files:"
@@ -148,25 +156,25 @@ jobs:
 
 
       # ==========================================================
-      # 7. VERIFY BUILD CONFIGURATION
+      # 7. SHOW BUILD CONFIGURATION
       # ==========================================================
 
-      - name: Verify buildozer.spec
+      - name: Show buildozer configuration
         shell: bash
         run: |
           set -e
 
           echo "=========================================="
-          echo "BUILDOZER SPEC"
+          echo "BUILDOZER CONFIGURATION"
           echo "=========================================="
 
           grep -E \
-            '^(android.api|android.minapi|android.ndk|android.build_tools_version|p4a.branch|android.archs|requirements)' \
-            buildozer.spec
+            '^(title|package.name|package.domain|version|requirements|android.api|android.minapi|android.ndk|android.build_tools_version|p4a.branch|android.archs)' \
+            buildozer.spec || true
 
 
       # ==========================================================
-      # 8. CREATE BUILDOZER DIRECTORIES
+      # 8. CREATE BUILDOZER PLATFORM DIRECTORY
       # ==========================================================
 
       - name: Prepare Buildozer directories
@@ -176,12 +184,15 @@ jobs:
 
           mkdir -p "$HOME/.buildozer/android/platform"
 
-          echo "Buildozer directory:"
+          echo "=========================================="
+          echo "BUILDOZER PLATFORM DIRECTORY"
+          echo "=========================================="
+
           ls -lah "$HOME/.buildozer/android/platform"
 
 
       # ==========================================================
-      # 9. INSTALL ANDROID COMMAND LINE TOOLS
+      # 9. INSTALL MODERN ANDROID COMMAND LINE TOOLS
       # ==========================================================
 
       - name: Install Android command line tools
@@ -192,14 +203,17 @@ jobs:
           SDK="$HOME/.buildozer/android/platform/android-sdk"
 
           echo "=========================================="
-          echo "ANDROID SDK SETUP"
+          echo "ANDROID COMMAND LINE TOOLS"
           echo "=========================================="
 
-          echo "SDK=$SDK"
+          echo "SDK:"
+          echo "$SDK"
 
           mkdir -p "$SDK/cmdline-tools"
 
           cd "$RUNNER_TEMP"
+
+          rm -f android-commandline-tools.zip
 
           wget -q \
             https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip \
@@ -225,28 +239,36 @@ jobs:
           echo "Command line tools installed."
 
           echo ""
-          echo "Contents:"
+          echo "Command line tools structure:"
 
           find "$SDK/cmdline-tools/latest" \
             -maxdepth 2 \
             -type f \
-            | head -50
+            | sort \
+            | head -100
 
 
       # ==========================================================
-      # 10. CREATE OLD SDK TOOLS COMPATIBILITY PATH
+      # 10. CREATE FULL LEGACY TOOLS COMPATIBILITY LINK
       #
       # IMPORTANT:
       #
-      # Old Buildozer/p4a looks for:
+      # DO NOT link only:
       #
-      # android-sdk/tools/bin/sdkmanager
+      # tools/bin -> cmdline-tools/latest/bin
       #
-      # Modern Android tools use:
+      # because sdkmanager needs its ../lib directory.
       #
-      # android-sdk/cmdline-tools/latest/bin/sdkmanager
+      # Instead:
       #
-      # This compatibility link fixes that mismatch.
+      # tools -> cmdline-tools/latest
+      #
+      # This gives:
+      #
+      # tools/bin/sdkmanager
+      # tools/lib/*
+      #
+      # while preserving the complete sdkmanager installation.
       # ==========================================================
 
       - name: Create SDK tools compatibility path
@@ -257,32 +279,50 @@ jobs:
           SDK="$HOME/.buildozer/android/platform/android-sdk"
 
           echo "=========================================="
-          echo "CREATING SDK TOOLS COMPATIBILITY PATH"
+          echo "SDK TOOLS COMPATIBILITY"
           echo "=========================================="
 
           rm -rf "$SDK/tools"
 
-          mkdir -p "$SDK/tools"
-
           ln -s \
-            "$SDK/cmdline-tools/latest/bin" \
-            "$SDK/tools/bin"
+            "$SDK/cmdline-tools/latest" \
+            "$SDK/tools"
 
           echo ""
-          echo "sdkmanager compatibility path:"
+          echo "SDK tools link:"
+
+          ls -lah "$SDK"
+
+          echo ""
+          echo "tools directory:"
 
           ls -lah "$SDK/tools"
 
           echo ""
-          echo "Checking sdkmanager:"
+          echo "tools/bin:"
+
+          ls -lah "$SDK/tools/bin"
+
+          echo ""
+          echo "tools/lib:"
+
+          ls -lah "$SDK/tools/lib" | head -30
+
+          echo ""
+          echo "Checking sdkmanager executable..."
 
           test -x "$SDK/tools/bin/sdkmanager"
+
+          echo "sdkmanager executable OK"
+
+          echo ""
+          echo "Testing sdkmanager..."
 
           "$SDK/tools/bin/sdkmanager" --version
 
 
       # ==========================================================
-      # 11. SET SDK PATH
+      # 11. SET ANDROID ENVIRONMENT
       # ==========================================================
 
       - name: Configure Android SDK environment
@@ -299,22 +339,33 @@ jobs:
           echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$SDK/platform-tools" >> "$GITHUB_PATH"
 
+          echo "=========================================="
+          echo "ANDROID ENVIRONMENT"
+          echo "=========================================="
+
           echo "ANDROID_HOME=$SDK"
           echo "ANDROID_SDK_ROOT=$SDK"
 
 
       # ==========================================================
-      # 12. ACCEPT LICENSES
+      # 12. ACCEPT ANDROID LICENSES
       # ==========================================================
 
-      - name: Accept Android licenses
+      - name: Accept Android SDK licenses
         shell: bash
         run: |
           set -e
 
           SDK="$HOME/.buildozer/android/platform/android-sdk"
 
-          export PATH="$SDK/tools/bin:$SDK/cmdline-tools/latest/bin:$PATH"
+          export ANDROID_HOME="$SDK"
+          export ANDROID_SDK_ROOT="$SDK"
+
+          export PATH="$SDK/tools/bin:$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
+
+          echo "=========================================="
+          echo "ACCEPTING ANDROID LICENSES"
+          echo "=========================================="
 
           yes | sdkmanager \
             --sdk_root="$SDK" \
@@ -322,11 +373,7 @@ jobs:
 
 
       # ==========================================================
-      # 13. INSTALL EXACT SDK COMPONENTS
-      #
-      # API 35
-      # BUILD TOOLS 37.0.0
-      # PLATFORM TOOLS
+      # 13. INSTALL SDK 35 + BUILD TOOLS 37
       # ==========================================================
 
       - name: Install Android SDK packages
@@ -336,10 +383,13 @@ jobs:
 
           SDK="$HOME/.buildozer/android/platform/android-sdk"
 
-          export PATH="$SDK/tools/bin:$SDK/cmdline-tools/latest/bin:$PATH"
+          export ANDROID_HOME="$SDK"
+          export ANDROID_SDK_ROOT="$SDK"
+
+          export PATH="$SDK/tools/bin:$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
 
           echo "=========================================="
-          echo "INSTALLING ANDROID SDK COMPONENTS"
+          echo "INSTALLING ANDROID SDK"
           echo "=========================================="
 
           sdkmanager \
@@ -350,7 +400,7 @@ jobs:
 
 
       # ==========================================================
-      # 14. VERIFY SDK
+      # 14. VERIFY SDK + AIDL
       # ==========================================================
 
       - name: Verify Android SDK
@@ -360,57 +410,90 @@ jobs:
 
           SDK="$HOME/.buildozer/android/platform/android-sdk"
 
-          export PATH="$SDK/tools/bin:$SDK/cmdline-tools/latest/bin:$PATH"
+          export ANDROID_HOME="$SDK"
+          export ANDROID_SDK_ROOT="$SDK"
+
+          export PATH="$SDK/tools/bin:$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
 
           echo "=========================================="
           echo "ANDROID SDK VERIFICATION"
           echo "=========================================="
 
           echo ""
-          echo "SDK:"
-          echo "$SDK"
+          echo "ANDROID_HOME:"
+          echo "$ANDROID_HOME"
 
           echo ""
-          echo "Installed packages:"
+          echo "ANDROID_SDK_ROOT:"
+          echo "$ANDROID_SDK_ROOT"
+
+          echo ""
+          echo "sdkmanager:"
+          command -v sdkmanager
+
+          echo ""
+          echo "sdkmanager version:"
+          sdkmanager --version
+
+          echo ""
+          echo "Installed SDK packages:"
 
           sdkmanager \
             --sdk_root="$SDK" \
             --list_installed || true
 
           echo ""
-          echo "Build Tools:"
+          echo "=========================================="
+          echo "BUILD TOOLS 37.0.0"
+          echo "=========================================="
 
           test -d "$SDK/build-tools/37.0.0"
 
           ls -lah "$SDK/build-tools/37.0.0"
 
           echo ""
-          echo "AIDL:"
+          echo "Checking AIDL..."
 
           test -x "$SDK/build-tools/37.0.0/aidl"
 
-          ls -lh "$SDK/build-tools/37.0.0/aidl"
+          echo "AIDL executable found."
 
           echo ""
-          echo "AAPT2:"
+          echo "AIDL path:"
+
+          command -v "$SDK/build-tools/37.0.0/aidl"
+
+          echo ""
+          echo "AIDL help test:"
+
+          "$SDK/build-tools/37.0.0/aidl" --help >/dev/null
+
+          echo "AIDL OK"
+
+          echo ""
+          echo "Checking AAPT2..."
 
           test -x "$SDK/build-tools/37.0.0/aapt2"
 
+          echo "AAPT2 OK"
+
           echo ""
-          echo "D8:"
+          echo "Checking D8..."
 
           test -x "$SDK/build-tools/37.0.0/d8"
 
+          echo "D8 OK"
+
           echo ""
-          echo "SDKMANAGER:"
+          echo "Checking ZIPALIGN..."
 
-          test -x "$SDK/tools/bin/sdkmanager"
+          test -x "$SDK/build-tools/37.0.0/zipalign"
 
-          echo "SDKMANAGER OK"
+          echo "ZIPALIGN OK"
 
 
       # ==========================================================
-      # 15. VERIFY JAVA / PYTHON / BUILDOZER
+      # 15. JAVA / PYTHON / BUILDOZER CHECK
       # ==========================================================
 
       - name: Final environment check
@@ -429,6 +512,10 @@ jobs:
           echo ""
           echo "Python:"
           python --version
+
+          echo ""
+          echo "Pip:"
+          python -m pip --version
 
           echo ""
           echo "Buildozer:"
@@ -461,18 +548,26 @@ jobs:
           echo "=========================================="
 
           echo ""
-          echo "SDK:"
+          echo "ANDROID_HOME:"
           echo "$ANDROID_HOME"
+
+          echo ""
+          echo "ANDROID_SDK_ROOT:"
+          echo "$ANDROID_SDK_ROOT"
 
           echo ""
           echo "SDKMANAGER:"
           test -x \
             "$HOME/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager"
 
+          echo "SDKMANAGER OK"
+
           echo ""
           echo "AIDL:"
           test -x \
             "$HOME/.buildozer/android/platform/android-sdk/build-tools/37.0.0/aidl"
+
+          echo "AIDL OK"
 
           echo ""
           echo "Starting Buildozer..."
@@ -481,7 +576,7 @@ jobs:
 
 
       # ==========================================================
-      # 17. FIND APK
+      # 17. SEARCH FOR APK
       # ==========================================================
 
       - name: Find generated APK
@@ -494,13 +589,16 @@ jobs:
 
           if [ -d bin ]; then
 
+            echo ""
+            echo "APK files:"
+
             find bin \
               -type f \
               -name "*.apk" \
               -print
 
             echo ""
-            echo "APK DETAILS:"
+            echo "APK details:"
 
             find bin \
               -type f \
@@ -515,7 +613,7 @@ jobs:
 
 
       # ==========================================================
-      # 18. UPLOAD APK
+      # 18. UPLOAD APK ARTIFACT
       # ==========================================================
 
       - name: Upload MoneyTracker APK
