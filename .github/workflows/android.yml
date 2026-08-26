@@ -1,44 +1,326 @@
-name: Build Android APK
+name: MoneyTracker Android APK
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
 
 jobs:
-  build:
+  build-android:
+    name: Build MoneyTracker APK
     runs-on: ubuntu-22.04
 
-    steps:
-      - uses: actions/checkout@v4
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      ANDROID_HOME: ${{ github.workspace }}/android-sdk
+      ANDROID_SDK_ROOT: ${{ github.workspace }}/android-sdk
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
-      - name: Setup Java
+    steps:
+
+      # ============================================================
+      # 1. CHECKOUT
+      # ============================================================
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ============================================================
+      # 2. JAVA 17
+      # ============================================================
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
-      - name: Setup Python
+      # ============================================================
+      # 3. PYTHON 3.11
+      # ============================================================
+      - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
-      - name: Install dependencies
+      # ============================================================
+      # 4. LINUX DEPENDENCIES
+      # ============================================================
+      - name: Install Linux dependencies
+        shell: bash
         run: |
+          set -e
+
           sudo apt-get update
+
           sudo apt-get install -y \
-            git zip unzip \
-            autoconf automake libtool \
-            pkg-config zlib1g-dev \
-            libffi-dev libssl-dev
+            git \
+            zip \
+            unzip \
+            wget \
+            curl \
+            autoconf \
+            automake \
+            libtool \
+            pkg-config \
+            zlib1g-dev \
+            libffi-dev \
+            libssl-dev \
+            libltdl-dev \
+            cmake \
+            build-essential
 
-          pip install --upgrade pip
-          pip install buildozer==1.5.0 cython==0.29.36
-
-      - name: Build APK
+      # ============================================================
+      # 5. ANDROID COMMAND LINE TOOLS
+      # ============================================================
+      - name: Install Android SDK command line tools
+        shell: bash
         run: |
-          buildozer android debug
+          set -e
 
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+
+          cd "$RUNNER_TEMP"
+
+          wget -q \
+            https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip \
+            -O commandlinetools.zip
+
+          rm -rf "$ANDROID_HOME/cmdline-tools/latest"
+
+          mkdir -p "$ANDROID_HOME/cmdline-tools/latest"
+
+          unzip -q commandlinetools.zip \
+            -d "$RUNNER_TEMP/cmdline-tools"
+
+          cp -R \
+            "$RUNNER_TEMP/cmdline-tools/cmdline-tools/"* \
+            "$ANDROID_HOME/cmdline-tools/latest/"
+
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+
+      # ============================================================
+      # 6. ACCEPT LICENSES
+      # ============================================================
+      - name: Accept Android SDK licenses
+        shell: bash
+        run: |
+          set -e
+
+          yes | sdkmanager \
+            --sdk_root="$ANDROID_HOME" \
+            --licenses || true
+
+      # ============================================================
+      # 7. INSTALL EXACT ANDROID SDK COMPONENTS
+      # ============================================================
+      - name: Install Android SDK components
+        shell: bash
+        run: |
+          set -e
+
+          sdkmanager \
+            --sdk_root="$ANDROID_HOME" \
+            "platform-tools" \
+            "platforms;android-33" \
+            "build-tools;33.0.2"
+
+      # ============================================================
+      # 8. VERIFY SDK / AIDL
+      # ============================================================
+      - name: Verify Android SDK and AIDL
+        shell: bash
+        run: |
+          set -e
+
+          echo "=================================================="
+          echo "ANDROID SDK VERIFICATION"
+          echo "=================================================="
+
+          echo ""
+          echo "ANDROID_HOME:"
+          echo "$ANDROID_HOME"
+
+          echo ""
+          echo "ANDROID_SDK_ROOT:"
+          echo "$ANDROID_SDK_ROOT"
+
+          echo ""
+          echo "Installed SDK packages:"
+          sdkmanager \
+            --sdk_root="$ANDROID_HOME" \
+            --list_installed || true
+
+          echo ""
+          echo "Build Tools directory:"
+          ls -lah "$ANDROID_HOME/build-tools"
+
+          echo ""
+          echo "Build Tools 33.0.2:"
+          ls -lah "$ANDROID_HOME/build-tools/33.0.2"
+
+          echo ""
+          echo "Checking AIDL:"
+          test -x "$ANDROID_HOME/build-tools/33.0.2/aidl"
+
+          echo ""
+          echo "AIDL version:"
+          "$ANDROID_HOME/build-tools/33.0.2/aidl" --version
+
+          echo ""
+          echo "Java version:"
+          java -version
+
+          echo ""
+          echo "Python version:"
+          python --version
+
+      # ============================================================
+      # 9. INSTALL BUILDOZER + CYTHON
+      # ============================================================
+      - name: Install Buildozer and Cython
+        shell: bash
+        run: |
+          set -e
+
+          python -m pip install --upgrade pip
+
+          python -m pip install \
+            "buildozer==1.5.0" \
+            "cython==0.29.36"
+
+          echo ""
+          echo "Buildozer:"
+          buildozer --version
+
+          echo ""
+          echo "Cython:"
+          cython --version
+
+      # ============================================================
+      # 10. VERIFY MONEYTRACKER PROJECT
+      # ============================================================
+      - name: Verify MoneyTracker project
+        shell: bash
+        run: |
+          set -e
+
+          echo "=================================================="
+          echo "MONEYTRACKER PROJECT VERIFICATION"
+          echo "=================================================="
+
+          echo ""
+          echo "Current directory:"
+          pwd
+
+          echo ""
+          echo "Root files:"
+          ls -lah
+
+          echo ""
+          echo "Checking buildozer.spec:"
+          test -f buildozer.spec
+
+          echo ""
+          echo "Checking main.py:"
+          test -f main.py
+
+          echo ""
+          echo "Checking mt directory:"
+          test -d mt
+
+          echo ""
+          echo "Files inside mt:"
+          find mt -maxdepth 1 -type f -print | sort
+
+      # ============================================================
+      # 11. VERIFY BUILDOZER CONFIGURATION
+      # ============================================================
+      - name: Verify Buildozer configuration
+        shell: bash
+        run: |
+          set -e
+
+          echo "=================================================="
+          echo "BUILDOZER CONFIGURATION"
+          echo "=================================================="
+
+          grep -E \
+            '^(title|package.name|package.domain|requirements|android.api|android.minapi|android.ndk|android.build_tools_version|android.archs|android.allow_backup|android.backup_rules)' \
+            buildozer.spec || true
+
+      # ============================================================
+      # 12. CLEAN BUILDOZER STATE
+      # ============================================================
+      - name: Clean Buildozer state
+        shell: bash
+        run: |
+          set -e
+
+          buildozer android clean || true
+
+          rm -rf .buildozer
+          rm -rf bin
+
+      # ============================================================
+      # 13. BUILD APK
+      # ============================================================
+      - name: Build Android APK
+        shell: bash
+        run: |
+          set -e
+
+          echo "=================================================="
+          echo "STARTING MONEYTRACKER APK BUILD"
+          echo "=================================================="
+
+          echo ""
+          echo "ANDROID_HOME=$ANDROID_HOME"
+
+          echo ""
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+
+          echo ""
+          echo "Checking AIDL before Buildozer:"
+          "$ANDROID_HOME/build-tools/33.0.2/aidl" --version
+
+          echo ""
+          echo "Starting Buildozer..."
+
+          buildozer -v android debug
+
+      # ============================================================
+      # 14. FIND APK
+      # ============================================================
+      - name: Find generated APK
+        if: always()
+        shell: bash
+        run: |
+          echo "=================================================="
+          echo "GENERATED APK FILES"
+          echo "=================================================="
+
+          if [ -d bin ]; then
+            find bin \
+              -type f \
+              -name "*.apk" \
+              -print \
+              -exec ls -lh {} \;
+          else
+            echo "bin directory does not exist."
+          fi
+
+      # ============================================================
+      # 15. UPLOAD APK ARTIFACT
+      # ============================================================
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: APK
+          name: MoneyTracker-APK
           path: bin/*.apk
+          if-no-files-found: error
