@@ -130,9 +130,9 @@ jobs:
             "build-tools;33.0.2"
 
       # ============================================================
-      # 8. VERIFY ANDROID SDK AND AIDL
+      # 8. VERIFY ANDROID SDK
       # ============================================================
-      - name: Verify Android SDK and AIDL
+      - name: Verify Android SDK
         shell: bash
         run: |
           set -e
@@ -142,12 +142,8 @@ jobs:
           echo "=================================================="
 
           echo ""
-          echo "ANDROID_HOME:"
-          echo "$ANDROID_HOME"
-
-          echo ""
-          echo "ANDROID_SDK_ROOT:"
-          echo "$ANDROID_SDK_ROOT"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
 
           echo ""
           echo "Installed SDK packages:"
@@ -156,7 +152,7 @@ jobs:
             --list_installed || true
 
           echo ""
-          echo "Build Tools directory:"
+          echo "Build Tools:"
           ls -lah "$ANDROID_HOME/build-tools"
 
           echo ""
@@ -164,19 +160,16 @@ jobs:
           ls -lah "$ANDROID_HOME/build-tools/33.0.2"
 
           echo ""
-          echo "Checking AIDL executable:"
+          echo "AIDL:"
           test -x "$ANDROID_HOME/build-tools/33.0.2/aidl"
-
-          echo ""
-          echo "AIDL executable found:"
           ls -lh "$ANDROID_HOME/build-tools/33.0.2/aidl"
 
           echo ""
-          echo "Java version:"
+          echo "Java:"
           java -version
 
           echo ""
-          echo "Python version:"
+          echo "Python:"
           python --version
 
       # ============================================================
@@ -194,15 +187,15 @@ jobs:
             "cython==0.29.36"
 
           echo ""
-          echo "Buildozer version:"
+          echo "Buildozer:"
           buildozer --version
 
           echo ""
-          echo "Cython version:"
+          echo "Cython:"
           cython --version
 
       # ============================================================
-      # 10. VERIFY MONEYTRACKER PROJECT
+      # 10. VERIFY PROJECT
       # ============================================================
       - name: Verify MoneyTracker project
         shell: bash
@@ -238,36 +231,121 @@ jobs:
           find mt -maxdepth 1 -type f -print | sort
 
       # ============================================================
-      # 11. VERIFY BUILDOZER CONFIGURATION
+      # 11. SHOW ORIGINAL BUILDOZER CONFIG
       # ============================================================
-      - name: Verify Buildozer configuration
+      - name: Show Buildozer configuration
         shell: bash
         run: |
           set -e
 
           echo "=================================================="
-          echo "BUILDOZER CONFIGURATION"
+          echo "ORIGINAL BUILDOZER CONFIGURATION"
           echo "=================================================="
 
           grep -E \
-            '^(title|package.name|package.domain|requirements|android.api|android.minapi|android.ndk|android.build_tools_version|android.archs|android.allow_backup|android.backup_rules)' \
+            '^(title|package.name|package.domain|requirements|android.api|android.minapi|android.ndk|android.build_tools_version|android.archs|android.allow_backup|android.backup_rules|android.sdk_path|android.ndk_path|android.skip_update)' \
             buildozer.spec || true
 
       # ============================================================
-      # 12. CLEAN BUILDOZER STATE
+      # 12. CREATE CI BUILDOZER CONFIGURATION
+      #
+      # This does NOT modify the repository file permanently.
+      # It creates a temporary CI copy so Buildozer uses the
+      # Android SDK installed by this workflow.
+      # ============================================================
+      - name: Configure Buildozer for CI Android SDK
+        shell: bash
+        run: |
+          set -e
+
+          cp buildozer.spec buildozer.spec.original
+
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("buildozer.spec")
+          text = path.read_text()
+
+          lines = text.splitlines()
+
+          filtered = []
+
+          for line in lines:
+              stripped = line.strip()
+
+              if stripped.startswith("android.sdk_path"):
+                  continue
+
+              if stripped.startswith("android.ndk_path"):
+                  continue
+
+              if stripped.startswith("android.skip_update"):
+                  continue
+
+              filtered.append(line)
+
+          filtered.append("")
+          filtered.append("# CI Android SDK configuration")
+          filtered.append("android.sdk_path = " + "${ANDROID_HOME}")
+          filtered.append("android.skip_update = True")
+
+          path.write_text("\n".join(filtered) + "\n")
+          PY
+
+          echo "=================================================="
+          echo "CI BUILDOZER CONFIGURATION"
+          echo "=================================================="
+
+          tail -n 15 buildozer.spec
+
+      # ============================================================
+      # 13. CLEAN BUILDOZER STATE
       # ============================================================
       - name: Clean Buildozer state
         shell: bash
         run: |
           set -e
 
-          buildozer android clean || true
-
           rm -rf .buildozer
           rm -rf bin
 
       # ============================================================
-      # 13. BUILD ANDROID APK
+      # 14. VERIFY BUILDOZER WILL USE OUR SDK
+      # ============================================================
+      - name: Verify Buildozer SDK configuration
+        shell: bash
+        run: |
+          set -e
+
+          echo "=================================================="
+          echo "FINAL SDK CONFIGURATION"
+          echo "=================================================="
+
+          echo ""
+          echo "ANDROID_HOME:"
+          echo "$ANDROID_HOME"
+
+          echo ""
+          echo "Expected SDK:"
+          echo "$ANDROID_HOME"
+
+          echo ""
+          echo "Expected Build Tools:"
+          echo "$ANDROID_HOME/build-tools/33.0.2"
+
+          echo ""
+          echo "AIDL:"
+          test -x "$ANDROID_HOME/build-tools/33.0.2/aidl"
+          ls -lh "$ANDROID_HOME/build-tools/33.0.2/aidl"
+
+          echo ""
+          echo "buildozer.spec SDK settings:"
+          grep -E \
+            '^(android.sdk_path|android.skip_update|android.api|android.minapi|android.ndk|android.build_tools_version)' \
+            buildozer.spec || true
+
+      # ============================================================
+      # 15. BUILD APK
       # ============================================================
       - name: Build Android APK
         shell: bash
@@ -285,7 +363,7 @@ jobs:
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
 
           echo ""
-          echo "Checking AIDL executable before Buildozer:"
+          echo "AIDL:"
           test -x "$ANDROID_HOME/build-tools/33.0.2/aidl"
           ls -lh "$ANDROID_HOME/build-tools/33.0.2/aidl"
 
@@ -295,7 +373,7 @@ jobs:
           buildozer -v android debug
 
       # ============================================================
-      # 14. FIND GENERATED APK
+      # 16. FIND GENERATED APK
       # ============================================================
       - name: Find generated APK
         if: always()
@@ -316,7 +394,7 @@ jobs:
           fi
 
       # ============================================================
-      # 15. UPLOAD APK ARTIFACT
+      # 17. UPLOAD APK
       # ============================================================
       - name: Upload APK
         if: success()
