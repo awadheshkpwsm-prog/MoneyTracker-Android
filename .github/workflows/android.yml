@@ -263,77 +263,7 @@ jobs:
           ls -lah "$ANDROID_HOME/ndk/28.2.13676358"
 
 
-      # ============================================================
-      # CHECK BUILD CONFIGURATION
-      # ============================================================
-
-      - name: Check build configuration
-        shell: bash
-        run: |
-          set -eux
-
-          test -f buildozer.spec
-
-          echo "========================================"
-          echo "PYTHON"
-          echo "========================================"
-
-          python --version
-          python -m pip --version
-          cython --version
-          buildozer --version
-
-          echo "========================================"
-          echo "JAVA"
-          echo "========================================"
-
-          java -version
-          javac -version
-
-          echo "========================================"
-          echo "ANDROID"
-          echo "========================================"
-
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          echo "ANDROID_NDK=$ANDROID_NDK"
-          echo "ANDROID_API=$ANDROID_API"
-          echo "ANDROID_MIN_API=$ANDROID_MIN_API"
-          echo "ANDROID_BUILD_TOOLS=$ANDROID_BUILD_TOOLS"
-
-          echo "========================================"
-          echo "SPEC"
-          echo "========================================"
-
-          cat buildozer.spec
-
-                # ============================================================
-            # ============================================================
-      # DIAGNOSTIC: FIND WHO REQUESTS BUILD-TOOLS 37
-      # ============================================================
-      #
-      # IMPORTANT:
-      # This step ONLY investigates the source of Build-Tools 37.
-      # APK BUILD WILL NOT RUN.
-      #
-      # Do NOT change buildozer.spec for this diagnostic.
-      # Do NOT install Build-Tools 37.
-      # Do NOT force Build-Tools 33.
-      # ============================================================
-
-      - name: DIAGNOSTIC - Find Build Tools 37 Source
-        shell: bash
-        run: |
-          set -eux
-
-          echo "========================================"
-          echo "DIAGNOSTIC START"
-          echo "========================================"
-
-          echo "========================================"
-          echo "BUILDOZER VERSION"
-          echo "========================================"
-
+      
           buildozer --version
 
           echo "========================================"
@@ -659,37 +589,90 @@ jobs:
           if [ -d "$INTERNAL_SDK/build-tools" ]; then
             find "$INTERNAL_SDK/build-tools" \
               -mindepth 1 \
-              -maxdepth 1 \
-              -type d \
-              -printf '%f\n' \
-              | sort -V
-          else
-            echo "Internal build-tools directory does not exist."
-          fi
+      # ============================================================
+      # DIAGNOSTIC: BUILDOZER INTERNAL ANDROID BUILD-TOOLS LOGIC
+      # ============================================================
+
+      - name: Inspect Buildozer Build-Tools Logic
+        shell: bash
+        run: |
+          set -eux
 
           echo "========================================"
-          echo "SDKMANAGER VERSION"
+          echo "BUILDOZER VERSION"
           echo "========================================"
-
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-
-          "$SDKMANAGER" --version
+          buildozer --version
 
           echo "========================================"
-          echo "AVAILABLE BUILD TOOLS"
+          echo "BUILDOZER ANDROID SOURCE"
           echo "========================================"
 
-          "$SDKMANAGER" --list 2>/dev/null \
-            | grep -E '^[[:space:]]*build-tools;' \
-            | head -100 || true
+          BUILDOZER_ANDROID="$(
+            python - <<'PY'
+          import buildozer
+          import os
+
+          path = os.path.join(
+              os.path.dirname(buildozer.__file__),
+              "targets",
+              "android.py"
+          )
+
+          print(path)
+          PY
+          )"
+
+          echo "BUILDOZER_ANDROID=$BUILDOZER_ANDROID"
+
+          test -f "$BUILDOZER_ANDROID"
 
           echo "========================================"
-          echo "ANDROID ENVIRONMENT"
+          echo "BUILDOZER ANDROID.PY LOCATION"
           echo "========================================"
 
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          echo "ANDROIDSDK=${ANDROIDSDK:-NOT_SET}"
+          ls -lah "$BUILDOZER_ANDROID"
+
+          echo "========================================"
+          echo "ANDROID.PY LINES 470-640"
+          echo "========================================"
+
+          nl -ba "$BUILDOZER_ANDROID" | sed -n '470,640p'
+
+          echo "========================================"
+          echo "SEARCH _ANDROID_LIST_BUILD_TOOLS_VERSIONS"
+          echo "========================================"
+
+          grep -n -B 10 -A 35 \
+            "_android_list_build_tools_versions" \
+            "$BUILDOZER_ANDROID" \
+            || true
+
+          echo "========================================"
+          echo "SEARCH _ANDROID_UPDATE_SDK"
+          echo "========================================"
+
+          grep -n -B 10 -A 35 \
+            "_android_update_sdk" \
+            "$BUILDOZER_ANDROID" \
+            || true
+
+          echo "========================================"
+          echo "SEARCH LATEST BUILD TOOLS LOGIC"
+          echo "========================================"
+
+          grep -n -B 15 -A 25 \
+            "latest_v_build_tools" \
+            "$BUILDOZER_ANDROID" \
+            || true
+
+          echo "========================================"
+          echo "SEARCH BUILD TOOLS CONFIG"
+          echo "========================================"
+
+          grep -n -B 10 -A 20 \
+            "build_tools_version" \
+            "$BUILDOZER_ANDROID" \
+            || true
 
           echo "========================================"
           echo "BUILD CONFIGURATION"
@@ -701,22 +684,49 @@ jobs:
           echo "ANDROID_NDK_VERSION=$ANDROID_NDK_VERSION"
 
           echo "========================================"
-          echo "SPEC ANDROID SETTINGS"
+          echo "SPEC SETTINGS"
           echo "========================================"
 
-          grep -n \
-            -E 'android\.build_tools_version|android\.api|android\.minapi|android\.ndk' \
-            buildozer.spec || true
+          grep -n -E \
+            'android\.api|android\.minapi|android\.ndk|android\.build_tools_version|p4a\.' \
+            buildozer.spec \
+            || true
+
+          echo "========================================"
+          echo "ANDROID SDK BUILD-TOOLS CURRENT STATE"
+          echo "========================================"
+
+          echo "ANDROID_HOME=$ANDROID_HOME"
+
+          if [ -d "$ANDROID_HOME/build-tools" ]; then
+            find "$ANDROID_HOME/build-tools" \
+              -mindepth 1 \
+              -maxdepth 1 \
+              -type d \
+              -printf '%f\n' \
+              | sort -V
+          else
+            echo "No build-tools directory found."
+          fi
+
+          echo "========================================"
+          echo "BUILD-TOOLS 37 REFERENCES INSIDE BUILDOZER"
+          echo "========================================"
+
+          grep -R -n \
+            -E 'build-tools;37|build-tools/37|37\.0\.0' \
+            "$(dirname "$BUILDOZER_ANDROID")" \
+            2>/dev/null \
+            || true
 
           echo "========================================"
           echo "DIAGNOSTIC COMPLETE"
           echo "========================================"
-          echo "APK BUILD WILL NOT RUN"
-          echo "WORKFLOW STOPPED INTENTIONALLY"
+          echo "APK BUILD WILL NOT RUN."
+          echo "WORKFLOW STOPPED INTENTIONALLY."
           echo "========================================"
 
           exit 1
-
 
       - name: Build Money Tracker APK
         shell: bash
