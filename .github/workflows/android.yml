@@ -307,19 +307,25 @@ jobs:
 
           cat buildozer.spec
 
+                # ============================================================
+      # CHECK BUILD TOOLS 37
+      # ============================================================
+
+      - name: Check Build Tools configuration
+        shell: bash
+        run: |
+          set -eux
+
           echo "========================================"
-          echo "CHECK BUILD TOOLS 37"
+          echo "CHECK BUILD TOOLS CONFIGURATION"
           echo "========================================"
 
-          if grep -R -n -E \
-            'build-tools;37|build-tools/37|build_tools_version[[:space:]]*=[[:space:]]*37|android.build_tools_version[[:space:]]*=[[:space:]]*37' \
-            buildozer.spec .github/workflows 2>/dev/null; then
+          echo "Configured Build Tools:"
+          echo "$ANDROID_BUILD_TOOLS"
 
-            echo "ERROR: BUILD-TOOLS 37 REFERENCE FOUND."
-            exit 1
-          fi
+          test "$ANDROID_BUILD_TOOLS" = "33.0.2"
 
-          echo "No Build-Tools 37 reference found."
+          echo "Build Tools 33.0.2 configuration: OK"
 
 
       # ============================================================
