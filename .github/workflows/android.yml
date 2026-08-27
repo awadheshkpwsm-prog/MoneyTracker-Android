@@ -8,70 +8,52 @@ permissions:
 
 jobs:
   build-android:
-    name: Build APK
+    name: Build Money Tracker APK
     runs-on: ubuntu-22.04
 
     env:
       DEBIAN_FRONTEND: noninteractive
 
-      # ============================================================
-      # PYTHON / JAVA
-      # ============================================================
+      # =====================================================
+      # EXACT BUILD TOOLCHAIN
+      # =====================================================
       PYTHON_VERSION: "3.11.13"
       JAVA_VERSION: "17"
 
-      # ============================================================
-      # ANDROID TOOLCHAIN
-      #
-      # These MUST match buildozer.spec
-      # ============================================================
       ANDROID_API: "33"
       ANDROID_MIN_API: "21"
       ANDROID_BUILD_TOOLS: "33.0.2"
 
-      # p4a recommends NDK 28c.
-      # GitHub runner provides the corresponding NDK package:
-      # 28.2.13676358
+      # p4a r28c
       ANDROID_NDK_VERSION: "28.2.13676358"
 
-      # ============================================================
-      # BUILDOZER
-      # ============================================================
       BUILDOZER_WARN_ON_ROOT: "0"
-
-      # ============================================================
-      # PIP
-      # ============================================================
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
       PIP_NO_INPUT: "1"
 
     steps:
 
-      # ============================================================
+      # =====================================================
       # 1. CHECKOUT
-      # ============================================================
+      # =====================================================
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ============================================================
-      # 2. PYTHON 3.11
-      #
-      # No pip cache.
-      # No requirements.txt required.
-      # ============================================================
+      # =====================================================
+      # 2. PYTHON 3.11.13
+      # =====================================================
       - name: Setup Python 3.11.13
         uses: actions/setup-python@v6
         with:
           python-version: "3.11.13"
           cache: ""
 
-      # ============================================================
+      # =====================================================
       # 3. JAVA 17
       #
       # IMPORTANT:
-      # Maven cache is intentionally NOT enabled.
-      # This project has no pom.xml.
-      # ============================================================
+      # NO MAVEN CACHE
+      # =====================================================
       - name: Setup Java 17
         uses: actions/setup-java@v5
         with:
@@ -79,9 +61,9 @@ jobs:
           java-version: "17"
           cache: ""
 
-      # ============================================================
+      # =====================================================
       # 4. SYSTEM DEPENDENCIES
-      # ============================================================
+      # =====================================================
       - name: Install system dependencies
         run: |
           set -eux
@@ -89,26 +71,33 @@ jobs:
           sudo apt-get update
 
           sudo apt-get install -y \
-            git \
-            zip \
-            unzip \
+            ant \
             autoconf \
             automake \
-            libtool \
-            pkg-config \
-            zlib1g-dev \
+            autopoint \
+            build-essential \
+            ccache \
+            cmake \
+            gettext \
+            git \
+            lbzip2 \
+            libffi-dev \
+            libltdl-dev \
             libncurses5-dev \
             libncursesw5-dev \
-            cmake \
-            libffi-dev \
+            libsqlite3-dev \
             libssl-dev \
-            libltdl-dev \
-            gettext \
-            libsqlite3-dev
+            libtool \
+            make \
+            patch \
+            pkg-config \
+            unzip \
+            wget \
+            zip
 
-      # ============================================================
+      # =====================================================
       # 5. VERIFY PYTHON / JAVA
-      # ============================================================
+      # =====================================================
       - name: Verify Python and Java
         run: |
           set -eux
@@ -129,9 +118,9 @@ jobs:
           java -version
           javac -version
 
-      # ============================================================
+      # =====================================================
       # 6. INSTALL BUILDOZER
-      # ============================================================
+      # =====================================================
       - name: Install Buildozer
         run: |
           set -eux
@@ -146,9 +135,9 @@ jobs:
             "Cython==0.29.34" \
             "sh"
 
-      # ============================================================
+      # =====================================================
       # 7. VERIFY BUILDOZER
-      # ============================================================
+      # =====================================================
       - name: Verify Buildozer
         run: |
           set -eux
@@ -159,134 +148,204 @@ jobs:
 
           python -c "import buildozer; print('Buildozer:', buildozer.__version__)"
 
-      # ============================================================
-      # 8. USE RUNNER ANDROID SDK
+      # =====================================================
+      # 8. USE RUNNER'S EXISTING ANDROID SDK
       #
-      # IMPORTANT:
-      #
-      # DO NOT create another Android SDK.
-      # DO NOT let Buildozer download its own SDK.
-      #
-      # GitHub runner already contains:
-      #
-      # build-tools;33.0.2
-      # platforms;android-33
-      # ndk;28.2.13676358
-      #
-      # ============================================================
+      # DO NOT CREATE ANOTHER SDK
+      # DO NOT DOWNLOAD OLD COMMAND LINE TOOLS
+      # =====================================================
       - name: Configure Android SDK
         run: |
           set -eux
 
-          echo "========================================"
-          echo "ANDROID SDK"
-          echo "========================================"
+          SDK="/usr/local/lib/android/sdk"
 
-          echo "ANDROID_HOME=$ANDROID_HOME"
+          test -d "$SDK"
 
-          test -d "$ANDROID_HOME"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
 
-          echo "========================================"
-          echo "SDKMANAGER"
-          echo "========================================"
+          # Buildozer / python-for-android names
+          echo "ANDROIDSDK=$SDK" >> "$GITHUB_ENV"
 
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          echo "ANDROIDAPI=33" >> "$GITHUB_ENV"
+          echo "ANDROIDMINAPI=21" >> "$GITHUB_ENV"
+
+          echo "SDK configured:"
+          echo "$SDK"
+
+      # =====================================================
+      # 9. INSTALL EXACT SDK COMPONENTS
+      #
+      # ONLY:
+      # API 33
+      # BUILD TOOLS 33.0.2
+      #
+      # We do NOT install build-tools 37.
+      # =====================================================
+      - name: Install exact Android SDK components
+        run: |
+          set -eux
+
+          SDK="/usr/local/lib/android/sdk"
+
+          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
 
           test -x "$SDKMANAGER"
 
+          echo "SDKMANAGER:"
           "$SDKMANAGER" --version
-
-          echo "========================================"
-          echo "REQUIRED SDK COMPONENTS"
-          echo "========================================"
-
-          test -d "$ANDROID_HOME/platforms/android-33"
-
-          test -d "$ANDROID_HOME/build-tools/33.0.2"
-
-          test -d "$ANDROID_HOME/ndk/28.2.13676358"
-
-          echo "Android API 33: OK"
-          echo "Build Tools 33.0.2: OK"
-          echo "NDK 28.2.13676358: OK"
-
-      # ============================================================
-      # 9. ACCEPT LICENSES
-      # ============================================================
-      - name: Accept Android SDK licenses
-        run: |
-          set -eux
-
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
 
           yes | "$SDKMANAGER" --licenses >/dev/null || true
 
-      # ============================================================
-      # 10. VERIFY AIDL
+          "$SDKMANAGER" \
+            --sdk_root="$SDK" \
+            "platform-tools" \
+            "platforms;android-33" \
+            "build-tools;33.0.2"
+
+          echo "========================================"
+          echo "VERIFY SDK 33"
+          echo "========================================"
+
+          test -d "$SDK/platforms/android-33"
+
+          echo "========================================"
+          echo "VERIFY BUILD TOOLS 33.0.2"
+          echo "========================================"
+
+          test -d "$SDK/build-tools/33.0.2"
+
+          test -x "$SDK/build-tools/33.0.2/aidl"
+
+          echo "AIDL exists:"
+          ls -lh "$SDK/build-tools/33.0.2/aidl"
+
+      # =====================================================
+      # 10. INSTALL EXACT NDK 28.2.13676358
       #
-      # IMPORTANT:
-      # Do NOT use:
-      #
-      # aidl --version
-      #
-      # because Build Tools 33.0.2 does not support that syntax.
-      #
-      # Just verify that the executable exists and runs.
-      # ============================================================
-      - name: Verify Android Build Tools and AIDL
+      # This is r28c.
+      # =====================================================
+      - name: Install exact Android NDK r28c
         run: |
           set -eux
 
-          AIDL="$ANDROID_HOME/build-tools/33.0.2/aidl"
+          SDK="/usr/local/lib/android/sdk"
 
-          test -x "$AIDL"
+          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
 
-          echo "AIDL found:"
-          "$AIDL" 2>&1 | head -n 20 || true
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
 
-          echo "AIDL executable verified."
+          "$SDKMANAGER" \
+            --sdk_root="$SDK" \
+            "ndk;28.2.13676358"
 
-      # ============================================================
-      # 11. VERIFY NDK
-      # ============================================================
-      - name: Verify Android NDK
+          test -d "$SDK/ndk/28.2.13676358"
+
+          echo "========================================"
+          echo "NDK INSTALLED"
+          echo "========================================"
+
+          ls -lah "$SDK/ndk/28.2.13676358"
+
+      # =====================================================
+      # 11. CONFIGURE EXACT SDK + NDK FOR BUILDOZER
+      #
+      # VERY IMPORTANT:
+      # Buildozer otherwise creates its own SDK/NDK.
+      # =====================================================
+      - name: Configure Buildozer Android paths
         run: |
           set -eux
 
-          NDK_PATH="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
+          SDK="/usr/local/lib/android/sdk"
+          NDK="$SDK/ndk/28.2.13676358"
+
+          test -d "$SDK"
+          test -d "$NDK"
+
+          echo "ANDROIDSDK=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROIDNDK=$NDK" >> "$GITHUB_ENV"
+
+          echo "ANDROID_NDK_ROOT=$NDK" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$NDK" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK=$NDK" >> "$GITHUB_ENV"
+
+          echo "ANDROIDAPI=33" >> "$GITHUB_ENV"
+          echo "ANDROIDMINAPI=21" >> "$GITHUB_ENV"
+
+          echo "NDKAPI=21" >> "$GITHUB_ENV"
+
+          echo "$SDK/platform-tools" >> "$GITHUB_PATH"
+          echo "$SDK/build-tools/33.0.2" >> "$GITHUB_PATH"
+
+          echo "========================================"
+          echo "ANDROID PATHS"
+          echo "========================================"
+
+          echo "ANDROIDSDK=$SDK"
+          echo "ANDROIDNDK=$NDK"
+          echo "ANDROIDAPI=33"
+          echo "ANDROIDMINAPI=21"
+          echo "NDKAPI=21"
+
+      # =====================================================
+      # 12. VERIFY SDK / NDK
+      # =====================================================
+      - name: Verify exact Android toolchain
+        run: |
+          set -eux
+
+          SDK="/usr/local/lib/android/sdk"
+          NDK="$SDK/ndk/28.2.13676358"
+
+          echo "========================================"
+          echo "SDK"
+          echo "========================================"
+
+          test -d "$SDK"
+          test -d "$SDK/platforms/android-33"
+          test -d "$SDK/build-tools/33.0.2"
+
+          echo "========================================"
+          echo "AIDL"
+          echo "========================================"
+
+          test -x "$SDK/build-tools/33.0.2/aidl"
+
+          # DO NOT use:
+          # aidl --version
+          #
+          # Build-tools 33.0.2 returns an error for that
+          # option. Existence/executability is the correct check.
+
+          "$SDK/build-tools/33.0.2/aidl" >/tmp/aidl-output.txt 2>&1 || true
+
+          head -20 /tmp/aidl-output.txt || true
+
+          echo "AIDL executable check passed."
 
           echo "========================================"
           echo "NDK"
           echo "========================================"
 
-          echo "NDK_PATH=$NDK_PATH"
+          test -d "$NDK"
 
-          test -d "$NDK_PATH"
+          test -f "$NDK/source.properties"
 
-          echo "NDK directory exists."
+          cat "$NDK/source.properties"
 
-          if [ -x "$NDK_PATH/ndk-build" ]; then
-            "$NDK_PATH/ndk-build" --version
-          fi
+          echo "========================================"
+          echo "SDKMANAGER INSTALLED PACKAGES"
+          echo "========================================"
 
-      # ============================================================
-      # 12. EXPORT ANDROID NDK VARIABLES
-      # ============================================================
-      - name: Configure Android NDK environment
-        run: |
-          set -eux
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" \
+            --sdk_root="$SDK" \
+            --list_installed || true
 
-          NDK_PATH="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
-
-          echo "ANDROID_NDK_ROOT=$NDK_PATH" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_HOME=$NDK_PATH" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK=$NDK_PATH" >> "$GITHUB_ENV"
-
-          echo "$NDK_PATH" >> "$GITHUB_PATH"
-
-      # ============================================================
-      # 13. VERIFY buildozer.spec
-      # ============================================================
+      # =====================================================
+      # 13. VERIFY SPEC
+      # =====================================================
       - name: Verify buildozer.spec
         run: |
           set -eux
@@ -304,36 +363,20 @@ jobs:
           echo "========================================"
 
           grep -E \
-            'android.api|android.minapi|android.ndk|android.ndk_api|android.build_tools_version|android.archs|requirements' \
+            'android.api|android.minapi|android.ndk|android.ndk_api|android.sdk_path|android.ndk_path|android.build_tools_version|android.archs|android.skip_update|requirements' \
             buildozer.spec
 
-          echo "========================================"
-          echo "CHECK BUILD-TOOLS 37 REFERENCES"
-          echo "========================================"
-
-          if grep -R -n -E \
-            'build-tools;37|build-tools/37|build_tools_version *= *37|android.build_tools_version *= *37' \
-            buildozer.spec .github/workflows \
-            --exclude-dir=.git; then
-
-            echo "ERROR: BUILD-TOOLS 37 REFERENCE FOUND."
-            exit 1
-          fi
-
-          echo "No Build-Tools 37 reference found."
-
-      # ============================================================
-      # 14. VERIFY SPEC MATCHES RUNNER
+      # =====================================================
+      # 14. HARD VALIDATION
       #
-      # This prevents the workflow and spec from silently
-      # requesting different versions.
-      # ============================================================
-      - name: Verify toolchain matches buildozer.spec
+      # Prevent accidental incompatible toolchain settings.
+      # =====================================================
+      - name: Validate toolchain configuration
         run: |
           set -eux
 
           echo "========================================"
-          echo "VERIFY TOOLCHAIN MATCH"
+          echo "VALIDATING TOOLCHAIN"
           echo "========================================"
 
           grep -q '^android.api = 33$' buildozer.spec
@@ -346,129 +389,92 @@ jobs:
 
           grep -q '^android.build_tools_version = 33.0.2$' buildozer.spec
 
-          grep -q '^android.archs = arm64-v8a,armeabi-v7a$' buildozer.spec
+          grep -q '^android.skip_update = True$' buildozer.spec
 
-          echo "buildozer.spec toolchain settings are correct."
+          grep -q '^android.sdk_path = /usr/local/lib/android/sdk$' buildozer.spec
 
-      # ============================================================
-      # 15. PREPARE BUILDOZER DIRECTORIES
+          grep -q '^android.ndk_path = /usr/local/lib/android/sdk/ndk/28.2.13676358$' buildozer.spec
+
+          echo "Toolchain configuration is correct."
+
+      # =====================================================
+      # 15. CLEAN ONLY PROJECT BUILDOZER STATE
       #
-      # Buildozer normally creates:
-      #
-      # .buildozer/android/platform/android-sdk
-      #
-      # and then downloads its own SDK/NDK.
-      #
-      # We instead connect that expected path to the runner SDK.
-      #
-      # ============================================================
-      - name: Prepare Buildozer Android SDK link
+      # Do NOT delete runner SDK/NDK.
+      # =====================================================
+      - name: Clean project Buildozer state
         run: |
           set -eux
-
-          echo "========================================"
-          echo "PREPARE BUILDOZER"
-          echo "========================================"
 
           rm -rf .buildozer
 
-          mkdir -p .buildozer/android/platform
+          rm -rf bin
 
-          ln -s "$ANDROID_HOME" \
-            ".buildozer/android/platform/android-sdk"
+          mkdir -p bin
 
-          echo "Buildozer Android SDK link:"
-          ls -lah .buildozer/android/platform
-
-          echo "SDK through Buildozer path:"
-
-          test -d \
-            ".buildozer/android/platform/android-sdk/build-tools/33.0.2"
-
-          test -d \
-            ".buildozer/android/platform/android-sdk/platforms/android-33"
-
-          test -d \
-            ".buildozer/android/platform/android-sdk/ndk/28.2.13676358"
-
-          echo "Buildozer can see runner SDK."
-
-      # ============================================================
-      # 16. CONFIGURE P4A / BUILDOZER ENVIRONMENT
-      #
-      # Prevent Buildozer from using a different NDK path.
-      # ============================================================
-      - name: Configure final Android environment
+      # =====================================================
+      # 16. FINAL ENVIRONMENT CHECK
+      # =====================================================
+      - name: Final Build Environment Check
         run: |
           set -eux
 
-          export ANDROID_HOME="$ANDROID_HOME"
-          export ANDROID_SDK_ROOT="$ANDROID_HOME"
-
-          NDK_PATH="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
-
-          export ANDROID_NDK_ROOT="$NDK_PATH"
-          export ANDROID_NDK_HOME="$NDK_PATH"
-          export ANDROID_NDK="$NDK_PATH"
+          echo "========================================"
+          echo "FINAL ENVIRONMENT"
+          echo "========================================"
 
           echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_HOME"
-          echo "ANDROID_NDK_ROOT=$NDK_PATH"
-          echo "ANDROID_NDK_HOME=$NDK_PATH"
-          echo "ANDROID_NDK=$NDK_PATH"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          echo "ANDROIDSDK=$ANDROIDSDK"
 
-          test -d "$ANDROID_HOME/build-tools/33.0.2"
-          test -d "$ANDROID_HOME/platforms/android-33"
-          test -d "$NDK_PATH"
+          echo "ANDROIDNDK=$ANDROIDNDK"
+          echo "ANDROID_NDK_ROOT=$ANDROID_NDK_ROOT"
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
 
-      # ============================================================
+          echo "ANDROIDAPI=$ANDROIDAPI"
+          echo "ANDROIDMINAPI=$ANDROIDMINAPI"
+          echo "NDKAPI=$NDKAPI"
+
+          echo "========================================"
+          echo "PATHS"
+          echo "========================================"
+
+          test -d "$ANDROIDSDK"
+          test -d "$ANDROIDNDK"
+
+          test -d "$ANDROIDSDK/platforms/android-33"
+          test -d "$ANDROIDSDK/build-tools/33.0.2"
+          test -x "$ANDROIDSDK/build-tools/33.0.2/aidl"
+
+          echo "All required Android components are present."
+
+      # =====================================================
       # 17. BUILD APK
       #
-      # ONLY workflow_dispatch can reach this step.
-      #
-      # Editing buildozer.spec or android.yml will NOT
-      # automatically start a build.
-      # ============================================================
-      - name: Build Money Tracker APK
+      # IMPORTANT:
+      # Buildozer must use the exact SDK/NDK paths
+      # specified in buildozer.spec.
+      # =====================================================
+      - name: Build Android APK
         run: |
           set -eux
 
           export BUILDOZER_WARN_ON_ROOT=0
 
-          export ANDROID_HOME="$ANDROID_HOME"
-          export ANDROID_SDK_ROOT="$ANDROID_HOME"
-
-          export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
-          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
-          export ANDROID_NDK="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
-
           echo "========================================"
-          echo "MONEY TRACKER APK BUILD"
+          echo "STARTING MONEY TRACKER APK BUILD"
           echo "========================================"
 
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          echo "ANDROID_NDK=$ANDROID_NDK"
-          echo "ANDROID_API=$ANDROID_API"
-          echo "ANDROID_MIN_API=$ANDROID_MIN_API"
-          echo "ANDROID_BUILD_TOOLS=$ANDROID_BUILD_TOOLS"
-          echo "ANDROID_NDK_VERSION=$ANDROID_NDK_VERSION"
-
-          echo "========================================"
-          echo "BUILDOZER"
-          echo "========================================"
-
-          buildozer --version
-
-          echo "========================================"
-          echo "BUILD"
-          echo "========================================"
+          echo "ANDROIDSDK=$ANDROIDSDK"
+          echo "ANDROIDNDK=$ANDROIDNDK"
+          echo "ANDROIDAPI=$ANDROIDAPI"
+          echo "ANDROIDMINAPI=$ANDROIDMINAPI"
 
           buildozer -v android debug
 
-      # ============================================================
+      # =====================================================
       # 18. SEARCH APK
-      # ============================================================
+      # =====================================================
       - name: Find APK
         if: always()
         run: |
@@ -490,17 +496,17 @@ jobs:
           find . -type f -name "*.aab" -print
 
           echo ""
-          echo "Bin directory:"
+          echo "bin directory:"
           ls -lah bin 2>/dev/null || true
 
           echo ""
           echo "Buildozer directory:"
           ls -lah .buildozer 2>/dev/null || true
 
-      # ============================================================
+      # =====================================================
       # 19. UPLOAD APK
-      # ============================================================
-      - name: Upload Money Tracker APK
+      # =====================================================
+      - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
@@ -509,9 +515,9 @@ jobs:
             bin/*.apk
           if-no-files-found: error
 
-      # ============================================================
-      # 20. UPLOAD BUILD LOGS
-      # ============================================================
+      # =====================================================
+      # 20. UPLOAD BUILD LOGS ON FAILURE
+      # =====================================================
       - name: Upload Buildozer logs
         if: failure()
         uses: actions/upload-artifact@v4
