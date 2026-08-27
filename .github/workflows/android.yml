@@ -15,7 +15,7 @@ jobs:
       DEBIAN_FRONTEND: noninteractive
 
       # =====================================================
-      # EXACT BUILD TOOLCHAIN
+      # BUILD TOOLCHAIN
       # =====================================================
       PYTHON_VERSION: "3.11.13"
       JAVA_VERSION: "17"
@@ -23,8 +23,6 @@ jobs:
       ANDROID_API: "33"
       ANDROID_MIN_API: "21"
       ANDROID_BUILD_TOOLS: "33.0.2"
-
-      # p4a r28c
       ANDROID_NDK_VERSION: "28.2.13676358"
 
       BUILDOZER_WARN_ON_ROOT: "0"
@@ -50,9 +48,6 @@ jobs:
 
       # =====================================================
       # 3. JAVA 17
-      #
-      # IMPORTANT:
-      # NO MAVEN CACHE
       # =====================================================
       - name: Setup Java 17
         uses: actions/setup-java@v5
@@ -149,10 +144,7 @@ jobs:
           python -c "import buildozer; print('Buildozer:', buildozer.__version__)"
 
       # =====================================================
-      # 8. USE RUNNER'S EXISTING ANDROID SDK
-      #
-      # DO NOT CREATE ANOTHER SDK
-      # DO NOT DOWNLOAD OLD COMMAND LINE TOOLS
+      # 8. CONFIGURE RUNNER ANDROID SDK
       # =====================================================
       - name: Configure Android SDK
         run: |
@@ -164,8 +156,6 @@ jobs:
 
           echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
-
-          # Buildozer / python-for-android names
           echo "ANDROIDSDK=$SDK" >> "$GITHUB_ENV"
 
           echo "ANDROIDAPI=33" >> "$GITHUB_ENV"
@@ -175,13 +165,7 @@ jobs:
           echo "$SDK"
 
       # =====================================================
-      # 9. INSTALL EXACT SDK COMPONENTS
-      #
-      # ONLY:
-      # API 33
-      # BUILD TOOLS 33.0.2
-      #
-      # We do NOT install build-tools 37.
+      # 9. INSTALL EXACT ANDROID SDK COMPONENTS
       # =====================================================
       - name: Install exact Android SDK components
         run: |
@@ -193,10 +177,15 @@ jobs:
 
           test -x "$SDKMANAGER"
 
-          echo "SDKMANAGER:"
+          echo "========================================"
+          echo "SDKMANAGER"
+          echo "========================================"
+
           "$SDKMANAGER" --version
 
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          yes | "$SDKMANAGER" \
+            --sdk_root="$SDK" \
+            --licenses >/dev/null || true
 
           "$SDKMANAGER" \
             --sdk_root="$SDK" \
@@ -205,7 +194,7 @@ jobs:
             "build-tools;33.0.2"
 
           echo "========================================"
-          echo "VERIFY SDK 33"
+          echo "VERIFY API 33"
           echo "========================================"
 
           test -d "$SDK/platforms/android-33"
@@ -218,13 +207,11 @@ jobs:
 
           test -x "$SDK/build-tools/33.0.2/aidl"
 
-          echo "AIDL exists:"
+          echo "AIDL found:"
           ls -lh "$SDK/build-tools/33.0.2/aidl"
 
       # =====================================================
-      # 10. INSTALL EXACT NDK 28.2.13676358
-      #
-      # This is r28c.
+      # 10. INSTALL EXACT NDK 28c
       # =====================================================
       - name: Install exact Android NDK r28c
         run: |
@@ -234,7 +221,9 @@ jobs:
 
           SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
 
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          yes | "$SDKMANAGER" \
+            --sdk_root="$SDK" \
+            --licenses >/dev/null || true
 
           "$SDKMANAGER" \
             --sdk_root="$SDK" \
@@ -249,50 +238,75 @@ jobs:
           ls -lah "$SDK/ndk/28.2.13676358"
 
       # =====================================================
-      # 11. CONFIGURE EXACT SDK + NDK FOR BUILDOZER
-      #
-      # VERY IMPORTANT:
-      # Buildozer otherwise creates its own SDK/NDK.
+      # 11. CONFIGURE ANDROID NDK
       # =====================================================
-      - name: Configure Buildozer Android paths
+      - name: Configure Android NDK
         run: |
           set -eux
 
           SDK="/usr/local/lib/android/sdk"
           NDK="$SDK/ndk/28.2.13676358"
 
-          test -d "$SDK"
           test -d "$NDK"
 
-          echo "ANDROIDSDK=$SDK" >> "$GITHUB_ENV"
           echo "ANDROIDNDK=$NDK" >> "$GITHUB_ENV"
-
           echo "ANDROID_NDK_ROOT=$NDK" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_HOME=$NDK" >> "$GITHUB_ENV"
           echo "ANDROID_NDK=$NDK" >> "$GITHUB_ENV"
-
-          echo "ANDROIDAPI=33" >> "$GITHUB_ENV"
-          echo "ANDROIDMINAPI=21" >> "$GITHUB_ENV"
 
           echo "NDKAPI=21" >> "$GITHUB_ENV"
 
           echo "$SDK/platform-tools" >> "$GITHUB_PATH"
           echo "$SDK/build-tools/33.0.2" >> "$GITHUB_PATH"
 
+      # =====================================================
+      # 12. TARGETED FIX FOR BUILDOZER 1.6.0
+      #
+      # Buildozer 1.6.0 looks for:
+      #
+      #   $ANDROIDSDK/tools/bin/sdkmanager
+      #
+      # Runner actually has:
+      #
+      #   $ANDROIDSDK/cmdline-tools/latest/bin/sdkmanager
+      #
+      # Create compatibility symlink.
+      # =====================================================
+      - name: Fix Buildozer sdkmanager path
+        run: |
+          set -eux
+
+          SDK="/usr/local/lib/android/sdk"
+
           echo "========================================"
-          echo "ANDROID PATHS"
+          echo "BUILDOZER SDKMANAGER COMPATIBILITY FIX"
           echo "========================================"
 
-          echo "ANDROIDSDK=$SDK"
-          echo "ANDROIDNDK=$NDK"
-          echo "ANDROIDAPI=33"
-          echo "ANDROIDMINAPI=21"
-          echo "NDKAPI=21"
+          test -x "$SDK/cmdline-tools/latest/bin/sdkmanager"
+
+          mkdir -p "$SDK/tools/bin"
+
+          ln -sf \
+            "$SDK/cmdline-tools/latest/bin/sdkmanager" \
+            "$SDK/tools/bin/sdkmanager"
+
+          test -e "$SDK/tools/bin/sdkmanager"
+
+          test -x "$SDK/tools/bin/sdkmanager"
+
+          echo "Expected Buildozer path:"
+          ls -lah "$SDK/tools/bin/sdkmanager"
+
+          echo "Real sdkmanager:"
+          readlink -f "$SDK/tools/bin/sdkmanager"
+
+          echo "sdkmanager version:"
+          "$SDK/tools/bin/sdkmanager" --version
 
       # =====================================================
-      # 12. VERIFY SDK / NDK
+      # 13. VERIFY EXACT TOOLCHAIN
       # =====================================================
-      - name: Verify exact Android toolchain
+      - name: Verify Android toolchain
         run: |
           set -eux
 
@@ -300,51 +314,50 @@ jobs:
           NDK="$SDK/ndk/28.2.13676358"
 
           echo "========================================"
-          echo "SDK"
+          echo "ANDROID SDK"
           echo "========================================"
+
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          echo "ANDROIDSDK=$ANDROIDSDK"
 
           test -d "$SDK"
-          test -d "$SDK/platforms/android-33"
-          test -d "$SDK/build-tools/33.0.2"
 
           echo "========================================"
-          echo "AIDL"
+          echo "SDK 33"
           echo "========================================"
+
+          test -d "$SDK/platforms/android-33"
+
+          echo "========================================"
+          echo "BUILD TOOLS 33.0.2"
+          echo "========================================"
+
+          test -d "$SDK/build-tools/33.0.2"
 
           test -x "$SDK/build-tools/33.0.2/aidl"
 
-          # DO NOT use:
-          # aidl --version
-          #
-          # Build-tools 33.0.2 returns an error for that
-          # option. Existence/executability is the correct check.
+          echo "========================================"
+          echo "SDKMANAGER"
+          echo "========================================"
 
-          "$SDK/build-tools/33.0.2/aidl" >/tmp/aidl-output.txt 2>&1 || true
+          test -x "$SDK/tools/bin/sdkmanager"
 
-          head -20 /tmp/aidl-output.txt || true
+          readlink -f "$SDK/tools/bin/sdkmanager"
 
-          echo "AIDL executable check passed."
+          "$SDK/tools/bin/sdkmanager" --version
 
           echo "========================================"
-          echo "NDK"
+          echo "NDK 28c"
           echo "========================================"
 
           test -d "$NDK"
-
           test -f "$NDK/source.properties"
 
           cat "$NDK/source.properties"
 
-          echo "========================================"
-          echo "SDKMANAGER INSTALLED PACKAGES"
-          echo "========================================"
-
-          "$SDK/cmdline-tools/latest/bin/sdkmanager" \
-            --sdk_root="$SDK" \
-            --list_installed || true
-
       # =====================================================
-      # 13. VERIFY SPEC
+      # 14. VERIFY BUILDOZER SPEC
       # =====================================================
       - name: Verify buildozer.spec
         run: |
@@ -367,17 +380,11 @@ jobs:
             buildozer.spec
 
       # =====================================================
-      # 14. HARD VALIDATION
-      #
-      # Prevent accidental incompatible toolchain settings.
+      # 15. VALIDATE SPEC
       # =====================================================
-      - name: Validate toolchain configuration
+      - name: Validate buildozer.spec
         run: |
           set -eux
-
-          echo "========================================"
-          echo "VALIDATING TOOLCHAIN"
-          echo "========================================"
 
           grep -q '^android.api = 33$' buildozer.spec
 
@@ -389,71 +396,60 @@ jobs:
 
           grep -q '^android.build_tools_version = 33.0.2$' buildozer.spec
 
-          grep -q '^android.skip_update = True$' buildozer.spec
-
           grep -q '^android.sdk_path = /usr/local/lib/android/sdk$' buildozer.spec
 
           grep -q '^android.ndk_path = /usr/local/lib/android/sdk/ndk/28.2.13676358$' buildozer.spec
 
-          echo "Toolchain configuration is correct."
+          grep -q '^android.skip_update = True$' buildozer.spec
+
+          echo "========================================"
+          echo "SPEC VALIDATION PASSED"
+          echo "========================================"
 
       # =====================================================
-      # 15. CLEAN ONLY PROJECT BUILDOZER STATE
+      # 16. CLEAN PROJECT BUILDOZER STATE
       #
-      # Do NOT delete runner SDK/NDK.
+      # IMPORTANT:
+      # Do NOT delete runner Android SDK/NDK.
       # =====================================================
       - name: Clean project Buildozer state
         run: |
           set -eux
 
           rm -rf .buildozer
-
           rm -rf bin
 
           mkdir -p bin
 
       # =====================================================
-      # 16. FINAL ENVIRONMENT CHECK
+      # 17. FINAL SDKMANAGER CHECK
+      #
+      # Make sure the symlink still exists immediately
+      # before Buildozer starts.
       # =====================================================
-      - name: Final Build Environment Check
+      - name: Final Buildozer SDK check
         run: |
           set -eux
 
-          echo "========================================"
-          echo "FINAL ENVIRONMENT"
-          echo "========================================"
-
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          echo "ANDROIDSDK=$ANDROIDSDK"
-
-          echo "ANDROIDNDK=$ANDROIDNDK"
-          echo "ANDROID_NDK_ROOT=$ANDROID_NDK_ROOT"
-          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
-
-          echo "ANDROIDAPI=$ANDROIDAPI"
-          echo "ANDROIDMINAPI=$ANDROIDMINAPI"
-          echo "NDKAPI=$NDKAPI"
+          SDK="/usr/local/lib/android/sdk"
 
           echo "========================================"
-          echo "PATHS"
+          echo "FINAL BUILDOZER SDK CHECK"
           echo "========================================"
 
-          test -d "$ANDROIDSDK"
-          test -d "$ANDROIDNDK"
+          test -x "$SDK/tools/bin/sdkmanager"
 
-          test -d "$ANDROIDSDK/platforms/android-33"
-          test -d "$ANDROIDSDK/build-tools/33.0.2"
-          test -x "$ANDROIDSDK/build-tools/33.0.2/aidl"
+          echo "Buildozer expected sdkmanager:"
+          ls -lah "$SDK/tools/bin/sdkmanager"
 
-          echo "All required Android components are present."
+          echo "Resolved sdkmanager:"
+          readlink -f "$SDK/tools/bin/sdkmanager"
+
+          echo "Version:"
+          "$SDK/tools/bin/sdkmanager" --version
 
       # =====================================================
-      # 17. BUILD APK
-      #
-      # IMPORTANT:
-      # Buildozer must use the exact SDK/NDK paths
-      # specified in buildozer.spec.
+      # 18. BUILD APK
       # =====================================================
       - name: Build Android APK
         run: |
@@ -473,9 +469,9 @@ jobs:
           buildozer -v android debug
 
       # =====================================================
-      # 18. SEARCH APK
+      # 19. FIND APK / AAB
       # =====================================================
-      - name: Find APK
+      - name: Find APK and AAB
         if: always()
         run: |
           set +e
@@ -504,7 +500,7 @@ jobs:
           ls -lah .buildozer 2>/dev/null || true
 
       # =====================================================
-      # 19. UPLOAD APK
+      # 20. UPLOAD APK
       # =====================================================
       - name: Upload APK
         if: success()
@@ -516,7 +512,7 @@ jobs:
           if-no-files-found: error
 
       # =====================================================
-      # 20. UPLOAD BUILD LOGS ON FAILURE
+      # 21. UPLOAD BUILD LOGS ON FAILURE
       # =====================================================
       - name: Upload Buildozer logs
         if: failure()
