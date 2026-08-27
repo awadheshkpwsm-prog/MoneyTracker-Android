@@ -612,8 +612,16 @@ jobs:
           set -eux
 
           rm -rf .buildozer
+          rm -rf ~/.buildozer/android/platform/python-for-android
+          rm -rf ~/.buildozer/android/platform/build-*
+          rm -rf ~/.buildozer/android/platform/packages
 
           mkdir -p bin
+
+          echo "All Buildozer and p4a caches removed."
+
+
+         
 
           echo "Old project Buildozer build cache removed."
           echo "Source files preserved."
