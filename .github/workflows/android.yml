@@ -19,7 +19,7 @@ env:
 
   BUILDOZER_VERSION: "1.6.0"
   CYTHON_VERSION: "0.29.34"
-  P4A_VERSION: "2026.5.9"
+  P4A_VERSION: "2025.01.21"
 
   BUILDOZER_WARN_ON_ROOT: "0"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
@@ -113,9 +113,12 @@ jobs:
             wheel
 
           python -m pip install \
-            "Cython==${CYTHON_VERSION}" \
-            "buildozer==${BUILDOZER_VERSION}" \
-            "python-for-android==${P4A_VERSION}"
+          "pip<25" \
+          "setuptools<81" \
+          "wheel" \
+          "Cython==0.29.34" \
+          "buildozer==1.6.0" \
+          "python-for-android==2025.01.21"
 
           echo "========================================"
           echo "TOOLCHAIN"
