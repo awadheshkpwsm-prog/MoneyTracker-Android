@@ -677,12 +677,7 @@ jobs:
       # 18. BUILD APK
       # ============================================================
 
-            python - << 'PY'
-            import pythonforandroid
-            print("python-for-android loaded successfully")
-            print("module:", pythonforandroid.__file__)
-            PY
-
+          
 
 
         
