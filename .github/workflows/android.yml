@@ -677,22 +677,56 @@ jobs:
       # 18. BUILD APK
       # ============================================================
 
-       - name: Verify python-for-android
-         shell: bash
-         run: |
-           python - << 'PY'
-           import pythonforandroid
-           print("python-for-android loaded successfully")
-           print("module:", pythonforandroid.__file__)
-           PY
+              # ============================================================
+      # 18. VERIFY P4A
+      # ============================================================
 
+      - name: Verify python-for-android
+        shell: bash
+        run: |
+          python - << 'PY'
+          import pythonforandroid
+          print("python-for-android loaded successfully")
+          print("module:", pythonforandroid.__file__)
+          PY
+
+      # ============================================================
+      # 19. BUILD APK
+      # ============================================================
+
+      - name: Build MoneyTracker APK
+        shell: bash
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          set -eux
+
+          echo "========================================"
+          echo "START MONEYTRACKER APK BUILD"
+          echo "========================================"
+
+          echo "Project:"
+          pwd
+
+          echo "Python:"
+          python --version
+
+          echo "Java:"
+          java -version
+
+          echo "Buildozer:"
+          buildozer --version
+
+          echo "P4A:"
+          p4a --version
+
+          buildozer -v android debug
 
         
-        - name: Build MoneyTracker APK
-         shell: bash
-         working-directory: ${{ env.PROJECT_DIR }}
-         run: |
-          set -eux
+          - name: Build MoneyTracker APK
+           shell: bash
+           working-directory: ${{ env.PROJECT_DIR }}
+           run: |
+            set -eux
 
           echo "========================================"
           echo "START MONEYTRACKER APK BUILD"
