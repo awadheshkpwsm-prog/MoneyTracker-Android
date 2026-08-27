@@ -1,9 +1,6 @@
-name: Build Money Tracker APK
+name: Build Money Tracker Android
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
@@ -11,56 +8,56 @@ permissions:
 
 jobs:
   build-android:
-    name: Build Money Tracker APK
+    name: Build APK
     runs-on: ubuntu-22.04
 
     env:
-      JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.20-1/x64
+      DEBIAN_FRONTEND: noninteractive
 
-      ANDROIDAPI: "33"
-      ANDROIDMINAPI: "21"
-      ANDROIDNDK: "r28c"
+      # ======================================================
+      # EXACT ANDROID TOOLCHAIN
+      # ======================================================
+      ANDROID_API: "33"
+      ANDROID_MIN_API: "21"
+      ANDROID_BUILD_TOOLS: "33.0.2"
+      ANDROID_NDK_VERSION: "28.2.13676358"
 
+      # ======================================================
+      # BUILD SETTINGS
+      # ======================================================
+      BUILDOZER_WARN_ON_ROOT: "0"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
       PIP_NO_INPUT: "1"
-      PYTHONUNBUFFERED: "1"
 
     steps:
 
-      # ============================================================
-      # CHECKOUT
-      # ============================================================
-
-      - name: Checkout project
+      # ======================================================
+      # 1. CHECKOUT
+      # ======================================================
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-
-      # ============================================================
-      # PYTHON 3.11
-      # ============================================================
-
-      - name: Setup Python 3.11
+      # ======================================================
+      # 2. PYTHON 3.11
+      # ======================================================
+      - name: Setup Python 3.11.13
         uses: actions/setup-python@v6
         with:
           python-version: "3.11.13"
-          
+          cache: ""
 
-
-      # ============================================================
-      # JAVA 17
-      # ============================================================
-
+      # ======================================================
+      # 3. JAVA 17
+      # ======================================================
       - name: Setup Java 17
         uses: actions/setup-java@v5
         with:
-          distribution: "temurin"
+          distribution: temurin
           java-version: "17"
 
-
-      # ============================================================
-      # SYSTEM DEPENDENCIES
-      # ============================================================
-
+      # ======================================================
+      # 4. INSTALL SYSTEM PACKAGES
+      # ======================================================
       - name: Install system dependencies
         run: |
           set -eux
@@ -71,9 +68,6 @@ jobs:
             git \
             zip \
             unzip \
-            wget \
-            curl \
-            build-essential \
             autoconf \
             automake \
             libtool \
@@ -81,255 +75,269 @@ jobs:
             zlib1g-dev \
             libncurses5-dev \
             libncursesw5-dev \
-            libtinfo5 \
             cmake \
             libffi-dev \
             libssl-dev \
-            liblzma-dev \
-            libsqlite3-dev \
+            libltdl-dev \
             gettext \
-            libtool-bin \
-            openjdk-17-jdk
+            libsqlite3-dev
 
-
-      # ============================================================
-      # VERIFY ENVIRONMENT
-      # ============================================================
-
+      # ======================================================
+      # 5. VERIFY PYTHON / JAVA
+      # ======================================================
       - name: Verify build environment
         run: |
           set -eux
 
           echo "========================================"
-          echo "BUILD ENVIRONMENT"
+          echo "PYTHON"
           echo "========================================"
-
           python --version
-          python -m pip --version
+          python3 --version
+          which python
+          which python3
 
+          echo "========================================"
+          echo "JAVA"
+          echo "========================================"
           java -version
 
-          echo "ANDROIDAPI=$ANDROIDAPI"
-          echo "ANDROIDMINAPI=$ANDROIDMINAPI"
-          echo "ANDROIDNDK=$ANDROIDNDK"
-
           echo "========================================"
-          echo "PROJECT FILES"
+          echo "ANDROID VARIABLES"
           echo "========================================"
+          echo "ANDROID_API=$ANDROID_API"
+          echo "ANDROID_MIN_API=$ANDROID_MIN_API"
+          echo "ANDROID_BUILD_TOOLS=$ANDROID_BUILD_TOOLS"
+          echo "ANDROID_NDK_VERSION=$ANDROID_NDK_VERSION"
 
-          pwd
-          find . -maxdepth 2 -type f | sort
-
-
-      # ============================================================
-      # INSTALL BUILDOZER
-      # ============================================================
-
-      - name: Install Buildozer
+      # ======================================================
+      # 6. INSTALL PYTHON BUILD TOOLS
+      # ======================================================
+      - name: Install Buildozer and Python build dependencies
         run: |
           set -eux
 
-          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install --upgrade \
+            "pip<26" \
+            "setuptools<81" \
+            wheel
 
           python -m pip install \
-            "buildozer==1.6.0"
-
-
-      # ============================================================
-      # INSTALL KIVY / CYTHON
-      # ============================================================
-
-      - name: Install Python build dependencies
-        run: |
-          set -eux
-
-          python -m pip install \
+            "buildozer==1.6.0" \
             "Cython==0.29.34" \
-            "kivy==2.3.1"
+            "sh"
 
-
-      # ============================================================
-      # VERIFY BUILDOZER
-      # ============================================================
-
-      - name: Verify Buildozer and Kivy
+      # ======================================================
+      # 7. VERIFY BUILDOZER
+      # ======================================================
+      - name: Verify Buildozer
         run: |
           set -eux
-
-          echo "========================================"
-          echo "VERSIONS"
-          echo "========================================"
-
-          python --version
-          python -m pip --version
 
           buildozer --version
 
-          python -c "import kivy; print('Kivy:', kivy.__version__)"
           python -c "import Cython; print('Cython:', Cython.__version__)"
 
+          python -c "import buildozer; print('Buildozer:', buildozer.__version__)"
 
-      # ============================================================
-      # FIND BUILDOZER SPEC
-      # ============================================================
-
-      - name: Locate buildozer.spec
-        shell: bash
+      # ======================================================
+      # 8. INSTALL ANDROID SDK
+      #
+      # IMPORTANT:
+      # ONLY API 33 + BUILD TOOLS 33.0.2
+      #
+      # NO BUILD-TOOLS 37
+      # ======================================================
+      - name: Install exact Android SDK
         run: |
           set -eux
 
-          SPEC_FILE="$(find . -name "buildozer.spec" -type f | head -n 1)"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
 
-          if [ -z "$SPEC_FILE" ]; then
-            echo "ERROR: buildozer.spec not found!"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "SDKMANAGER=$SDKMANAGER"
+
+          "$SDKMANAGER" --version
+
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-33" \
+            "build-tools;33.0.2"
+
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+
+      # ======================================================
+      # 9. VERIFY EXACT BUILD TOOLS
+      # ======================================================
+      - name: Verify Android SDK
+        run: |
+          set -eux
+
+          echo "========================================"
+          echo "INSTALLED ANDROID SDK"
+          echo "========================================"
+
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --list_installed || true
+
+          echo "========================================"
+          echo "BUILD TOOLS"
+          echo "========================================"
+
+          ls -lah "$ANDROID_HOME/build-tools"
+
+          test -d "$ANDROID_HOME/build-tools/33.0.2"
+
+          echo "========================================"
+          echo "AIDL"
+          echo "========================================"
+
+          test -x "$ANDROID_HOME/build-tools/33.0.2/aidl"
+
+          "$ANDROID_HOME/build-tools/33.0.2/aidl" --version
+
+      # ======================================================
+      # 10. INSTALL EXACT NDK 28c
+      # ======================================================
+      - name: Install Android NDK 28c
+        run: |
+          set -eux
+
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+
+          "$SDKMANAGER" \
+            "ndk;28.2.13676358"
+
+          test -d "$ANDROID_HOME/ndk/28.2.13676358"
+
+          echo "NDK installed:"
+          ls -lah "$ANDROID_HOME/ndk/28.2.13676358"
+
+      # ======================================================
+      # 11. SET NDK ENVIRONMENT
+      # ======================================================
+      - name: Configure Android NDK
+        run: |
+          set -eux
+
+          NDK_PATH="$ANDROID_HOME/ndk/28.2.13676358"
+
+          echo "ANDROID_NDK_ROOT=$NDK_PATH" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$NDK_PATH" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK=$NDK_PATH" >> "$GITHUB_ENV"
+
+          echo "$NDK_PATH" >> "$GITHUB_PATH"
+
+      # ======================================================
+      # 12. VERIFY BUILDOZER SPEC
+      # ======================================================
+      - name: Verify buildozer.spec
+        run: |
+          set -eux
+
+          test -f buildozer.spec
+
+          echo "========================================"
+          echo "BUILDOVER.SPEC"
+          echo "========================================"
+
+          cat buildozer.spec
+
+          echo "========================================"
+          echo "CHECK TOOLCHAIN SETTINGS"
+          echo "========================================"
+
+          grep -E \
+            'android.api|android.minapi|android.ndk|android.build_tools_version|android.archs|requirements' \
+            buildozer.spec
+
+          echo "========================================"
+          echo "ENSURE NO BUILD-TOOLS 37"
+          echo "========================================"
+
+          if grep -R "37\.0\.0\|build-tools;37" buildozer.spec .github/workflows; then
+            echo "ERROR: Build-Tools 37 reference found."
             exit 1
           fi
 
-          PROJECT_DIR="$(dirname "$SPEC_FILE")"
-
-          echo "SPEC_FILE=$SPEC_FILE"
-          echo "PROJECT_DIR=$PROJECT_DIR"
-
-          echo "SPEC_FILE=$SPEC_FILE" >> "$GITHUB_ENV"
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-
-
-      # ============================================================
-      # SHOW BUILDOZER SPEC
-      # ============================================================
-
-      - name: Show buildozer.spec
-        run: |
-          set -eux
-
-          echo "========================================"
-          echo "BUILDZER SPEC"
-          echo "========================================"
-
-          cat "$SPEC_FILE"
-
-
-      # ============================================================
-      # CLEAN ALL PREVIOUS BUILDS
+      # ======================================================
+      # 13. CLEAN OLD BUILDOZER CACHE
       #
-      # IMPORTANT:
-      # This removes stale p4a build/venv and mixed pip state.
-      # ============================================================
-
-      - name: Clean Buildozer and p4a caches
-        shell: bash
+      # Prevents old SDK / NDK / p4a state from previous
+      # failed builds from interfering.
+      # ======================================================
+      - name: Clean Buildozer state
         run: |
           set -eux
-
-          cd "$PROJECT_DIR"
-
-          echo "========================================"
-          echo "CLEANING OLD BUILD DATA"
-          echo "========================================"
 
           rm -rf .buildozer
-          rm -rf bin
-
-          echo "Clean build directory prepared."
 
           mkdir -p .buildozer
 
-
-      # ============================================================
-      # CREATE BUILD DIRECTORY
-      # ============================================================
-
-      - name: Prepare clean build directories
-        shell: bash
+      # ======================================================
+      # 14. BUILD APK
+      # ======================================================
+      - name: Build Android APK
         run: |
           set -eux
 
-          cd "$PROJECT_DIR"
-
-          mkdir -p .buildozer
-          mkdir -p bin
-
-          echo "PROJECT_DIR=$PROJECT_DIR"
-
-          ls -lah
-
-
-      # ============================================================
-      # BUILD DEBUG APK
-      # ============================================================
-
-      - name: Build Debug APK
-        shell: bash
-        run: |
-          set -eux
-
-          cd "$PROJECT_DIR"
-
-          echo "========================================"
-          echo "STARTING BUILDOZER DEBUG BUILD"
-          echo "========================================"
+          export BUILDOZER_WARN_ON_ROOT=0
 
           buildozer -v android debug
 
-
-      # ============================================================
-      # SEARCH APK / AAB
-      # ============================================================
-
-      - name: Search APK and AAB
+      # ======================================================
+      # 15. FIND APK
+      # ======================================================
+      - name: Find APK
         if: always()
-        shell: bash
         run: |
           set +e
 
           echo "========================================"
-          echo "APK / AAB SEARCH"
+          echo "APK SEARCH"
           echo "========================================"
 
-          echo "Current directory:"
           pwd
 
           echo ""
-          echo "Searching for APK/AAB files..."
-
-          find . -type f \
-            \( -name "*.apk" -o -name "*.aab" \) \
-            -print
+          echo "APK files:"
+          find . -type f -name "*.apk" -print
 
           echo ""
-          echo "bin directory:"
+          echo "AAB files:"
+          find . -type f -name "*.aab" -print
+
+          echo ""
+          echo "Bin directory:"
           ls -lah bin 2>/dev/null || true
 
           echo ""
           echo "Buildozer directory:"
           ls -lah .buildozer 2>/dev/null || true
 
-
-      # ============================================================
-      # UPLOAD APK
-      # ============================================================
-
-      - name: Upload APK artifact
+      # ======================================================
+      # 16. UPLOAD APK
+      # ======================================================
+      - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: MoneyTracker-APK
           path: |
-            ${{ env.PROJECT_DIR }}/bin/*.apk
+            bin/*.apk
           if-no-files-found: error
-          retention-days: 30
 
-
-      # ============================================================
-      # UPLOAD BUILD LOGS IF BUILD FAILS
-      # ============================================================
-
+      # ======================================================
+      # 17. UPLOAD BUILD LOGS IF BUILD FAILS
+      # ======================================================
       - name: Upload Buildozer logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: MoneyTracker-Build-Logs
           path: |
-            ${{ env.PROJECT_DIR }}/.buildozer/
+            .buildozer/
           if-no-files-found: warn
-          retention-days: 7
