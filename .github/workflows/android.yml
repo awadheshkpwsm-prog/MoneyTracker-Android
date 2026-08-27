@@ -308,13 +308,247 @@ jobs:
           cat buildozer.spec
 
                 # ============================================================
-      # CHECK BUILD TOOLS 37
+            # ============================================================
+      # DIAGNOSTIC: FIND WHO REQUESTS BUILD-TOOLS 37
+      # ============================================================
+      #
+      # IMPORTANT:
+      # This step ONLY investigates the source of Build-Tools 37.
+      # APK BUILD WILL NOT RUN.
+      #
+      # Do NOT change buildozer.spec for this diagnostic.
+      # Do NOT install Build-Tools 37.
+      # Do NOT force Build-Tools 33.
       # ============================================================
 
-      - name: Check Build Tools configuration
+      - name: DIAGNOSTIC - Find Build Tools 37 Source
         shell: bash
         run: |
           set -eux
+
+          echo "========================================"
+          echo "DIAGNOSTIC START"
+          echo "========================================"
+
+          echo "========================================"
+          echo "BUILDOZER VERSION"
+          echo "========================================"
+
+          buildozer --version
+
+          echo "========================================"
+          echo "BUILDOZER LOCATION"
+          echo "========================================"
+
+          BUILDOZER_PATH="$(command -v buildozer)"
+
+          echo "BUILDOZER_PATH=$BUILDOZER_PATH"
+
+          python - <<'PY'
+          import buildozer
+          import os
+
+          print("Buildozer Python module:")
+          print(buildozer.__file__)
+
+          print("Buildozer module directory:")
+          print(os.path.dirname(buildozer.__file__))
+          PY
+
+          echo "========================================"
+          echo "PYTHON VERSION"
+          echo "========================================"
+
+          python --version
+          python -m pip --version
+
+          echo "========================================"
+          echo "PYTHON-FOR-ANDROID PIP PACKAGE"
+          echo "========================================"
+
+          python -m pip show python-for-android || true
+
+          echo "========================================"
+          echo "PYTHON-FOR-ANDROID COMMAND"
+          echo "========================================"
+
+          command -v p4a || true
+
+          if command -v p4a >/dev/null 2>&1; then
+            p4a --version || true
+          else
+            echo "p4a command NOT FOUND in host Python environment."
+          fi
+
+          echo "========================================"
+          echo "BUILDOZER SOURCE DIRECTORY"
+          echo "========================================"
+
+          BUILDOZER_DIR="$(python - <<'PY'
+          import buildozer
+          import os
+          print(os.path.dirname(buildozer.__file__))
+          PY
+          )"
+
+          echo "BUILDOZER_DIR=$BUILDOZER_DIR"
+
+          test -d "$BUILDOZER_DIR"
+
+          echo "========================================"
+          echo "SEARCH BUILDOZER SOURCE FOR BUILD-TOOLS"
+          echo "========================================"
+
+          grep -R -n -E \
+            'build-tools|build_tools_version|build-tools;37|build-tools/37|37\.0\.0' \
+            "$BUILDOZER_DIR" \
+            2>/dev/null \
+            | head -300 || true
+
+          echo "========================================"
+          echo "SEARCH INSTALLED PYTHON PACKAGES"
+          echo "FOR BUILD-TOOLS 37"
+          echo "========================================"
+
+          SITE_PACKAGES="$(python - <<'PY'
+          import site
+          for p in site.getsitepackages():
+              print(p)
+          PY
+          )"
+
+          echo "SITE_PACKAGES:"
+          echo "$SITE_PACKAGES"
+
+          while IFS= read -r SITE; do
+            if [ -d "$SITE" ]; then
+              echo "========================================"
+              echo "SEARCHING: $SITE"
+              echo "========================================"
+
+              grep -R -n -E \
+                'build-tools;37|build-tools/37|build_tools_version[[:space:]]*=[[:space:]]*37|37\.0\.0' \
+                "$SITE" \
+                2>/dev/null \
+                | head -300 || true
+            fi
+          done <<< "$SITE_PACKAGES"
+
+          echo "========================================"
+          echo "SEARCH ENTIRE WORKSPACE"
+          echo "FOR BUILD-TOOLS 37"
+          echo "========================================"
+
+          grep -R -n -E \
+            'build-tools;37|build-tools/37|build_tools_version[[:space:]]*=[[:space:]]*37|android\.build_tools_version[[:space:]]*=[[:space:]]*37|37\.0\.0' \
+            . \
+            2>/dev/null \
+            | head -500 || true
+
+          echo "========================================"
+          echo "BUILDOZER CONFIGURATION"
+          echo "========================================"
+
+          python - <<'PY'
+          from buildozer.config import BuildozerConfig
+          import inspect
+
+          print("BuildozerConfig source:")
+          try:
+              print(inspect.getsource(BuildozerConfig))
+          except Exception as e:
+              print("Could not print BuildozerConfig source:", e)
+          PY
+
+          echo "========================================"
+          echo "BUILDOZER ANDROID MODULES"
+          echo "========================================"
+
+          find "$BUILDOZER_DIR" \
+            -type f \
+            \( -name "*.py" -o -name "*.ini" -o -name "*.cfg" \) \
+            -print \
+            2>/dev/null \
+            | sort \
+            | head -500
+
+          echo "========================================"
+          echo "BUILDOZER CACHE STATUS"
+          echo "========================================"
+
+          echo "HOME=$HOME"
+
+          if [ -d "$HOME/.buildozer" ]; then
+            echo "HOME/.buildozer: FOUND"
+
+            find "$HOME/.buildozer" \
+              -maxdepth 6 \
+              \( -iname "*build*tool*" -o -iname "*p4a*" -o -iname "*python-for-android*" \) \
+              -print \
+              2>/dev/null \
+              | head -300 || true
+          else
+            echo "HOME/.buildozer: NOT FOUND"
+          fi
+
+          echo "========================================"
+          echo "PROJECT .BUILDOZER STATUS"
+          echo "========================================"
+
+          if [ -d ".buildozer" ]; then
+            echo ".buildozer: FOUND"
+
+            find .buildozer \
+              -maxdepth 8 \
+              \( -iname "*build*tool*" -o -iname "*p4a*" -o -iname "*python-for-android*" \) \
+              -print \
+              2>/dev/null \
+              | head -300 || true
+          else
+            echo ".buildozer: NOT FOUND"
+          fi
+
+          echo "========================================"
+          echo "SPEC SETTINGS"
+          echo "========================================"
+
+          grep -n -E \
+            'android\.build_tools_version|android\.api|android\.minapi|android\.ndk|p4a\.' \
+            buildozer.spec \
+            || true
+
+          echo "========================================"
+          echo "YAML BUILD-TOOLS REFERENCES"
+          echo "========================================"
+
+          grep -R -n -E \
+            'build-tools|build_tools_version|ANDROID_BUILD_TOOLS|37\.0\.0|build-tools;37|build-tools/37' \
+            .github/workflows \
+            2>/dev/null \
+            | head -300 || true
+
+          echo "========================================"
+          echo "ANDROID SDK AVAILABLE BUILD TOOLS"
+          echo "========================================"
+
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+
+          "$SDKMANAGER" --list 2>/dev/null \
+            | grep -E '^[[:space:]]*build-tools;' \
+            | head -100 \
+            || true
+
+          echo "========================================"
+          echo "FINAL DIAGNOSTIC STATUS"
+          echo "========================================"
+
+          echo "BUILD-TOOLS 37 SOURCE SEARCH COMPLETE."
+          echo "APK BUILD WILL NOT RUN."
+          echo "WORKFLOW STOPPED INTENTIONALLY."
+
+          echo "========================================"
+
+          exit 1
 
           echo "========================================"
           echo "CHECK BUILD TOOLS CONFIGURATION"
