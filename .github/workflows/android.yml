@@ -618,7 +618,7 @@ jobs:
           rm -rf ~/.buildozer/android/platform/python-for-android
           rm -rf ~/.buildozer/android/platform/build-*
           rm -rf ~/.buildozer/android/platform/packages
-
+          rm -rf ~/.buildozer/android/platform/android-sdk
           mkdir -p bin
 
           echo "All Buildozer and p4a caches removed."
@@ -677,6 +677,15 @@ jobs:
       # 18. BUILD APK
       # ============================================================
 
+            python - << 'PY'
+            import pythonforandroid
+            print("python-for-android loaded successfully")
+            print("module:", pythonforandroid.__file__)
+            PY
+
+
+
+        
       - name: Build MoneyTracker APK
         shell: bash
         working-directory: ${{ env.PROJECT_DIR }}
