@@ -19,7 +19,7 @@ env:
 
   BUILDOZER_VERSION: "1.6.0"
   CYTHON_VERSION: "0.29.34"
-  P4A_VERSION: "2025.01.21"
+  P4A_VERSION: "2024.1.21"
 
   BUILDOZER_WARN_ON_ROOT: "0"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
@@ -118,7 +118,7 @@ jobs:
           "wheel" \
           "Cython==0.29.34" \
           "buildozer==1.6.0" \
-          "python-for-android==2025.01.21"
+          "python-for-android==2024.1.21"
 
           echo "========================================"
           echo "TOOLCHAIN"
