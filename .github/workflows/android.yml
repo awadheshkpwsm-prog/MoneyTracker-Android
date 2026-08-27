@@ -15,15 +15,17 @@ jobs:
       DEBIAN_FRONTEND: noninteractive
 
       # ======================================================
-      # EXACT ANDROID TOOLCHAIN
+      # ANDROID TARGET
       # ======================================================
       ANDROID_API: "33"
       ANDROID_MIN_API: "21"
       ANDROID_BUILD_TOOLS: "33.0.2"
+
+      # NDK r28c = 28.2.13676358
       ANDROID_NDK_VERSION: "28.2.13676358"
 
       # ======================================================
-      # BUILD SETTINGS
+      # BUILDOZER
       # ======================================================
       BUILDOZER_WARN_ON_ROOT: "0"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
@@ -38,13 +40,12 @@ jobs:
         uses: actions/checkout@v4
 
       # ======================================================
-      # 2. PYTHON 3.11
+      # 2. PYTHON 3.11.13
       # ======================================================
       - name: Setup Python 3.11.13
         uses: actions/setup-python@v6
         with:
           python-version: "3.11.13"
-          cache: ""
 
       # ======================================================
       # 3. JAVA 17
@@ -56,7 +57,7 @@ jobs:
           java-version: "17"
 
       # ======================================================
-      # 4. INSTALL SYSTEM PACKAGES
+      # 4. SYSTEM DEPENDENCIES
       # ======================================================
       - name: Install system dependencies
         run: |
@@ -85,13 +86,14 @@ jobs:
       # ======================================================
       # 5. VERIFY PYTHON / JAVA
       # ======================================================
-      - name: Verify build environment
+      - name: Verify Python and Java
         run: |
           set -eux
 
           echo "========================================"
           echo "PYTHON"
           echo "========================================"
+
           python --version
           python3 --version
           which python
@@ -100,20 +102,23 @@ jobs:
           echo "========================================"
           echo "JAVA"
           echo "========================================"
+
           java -version
+          javac -version
 
           echo "========================================"
-          echo "ANDROID VARIABLES"
+          echo "ANDROID TARGET"
           echo "========================================"
+
           echo "ANDROID_API=$ANDROID_API"
           echo "ANDROID_MIN_API=$ANDROID_MIN_API"
           echo "ANDROID_BUILD_TOOLS=$ANDROID_BUILD_TOOLS"
           echo "ANDROID_NDK_VERSION=$ANDROID_NDK_VERSION"
 
       # ======================================================
-      # 6. INSTALL PYTHON BUILD TOOLS
+      # 6. INSTALL BUILDOZER
       # ======================================================
-      - name: Install Buildozer and Python build dependencies
+      - name: Install Buildozer
         run: |
           set -eux
 
@@ -141,12 +146,14 @@ jobs:
           python -c "import buildozer; print('Buildozer:', buildozer.__version__)"
 
       # ======================================================
-      # 8. INSTALL ANDROID SDK
+      # 8. INSTALL EXACT ANDROID SDK COMPONENTS
       #
-      # IMPORTANT:
-      # ONLY API 33 + BUILD TOOLS 33.0.2
+      # ONLY:
+      #   API 33
+      #   BUILD TOOLS 33.0.2
+      #   PLATFORM TOOLS
       #
-      # NO BUILD-TOOLS 37
+      # DO NOT INSTALL BUILD TOOLS 37
       # ======================================================
       - name: Install exact Android SDK
         run: |
@@ -157,6 +164,8 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME"
           echo "SDKMANAGER=$SDKMANAGER"
 
+          test -x "$SDKMANAGER"
+
           "$SDKMANAGER" --version
 
           yes | "$SDKMANAGER" --licenses >/dev/null || true
@@ -166,41 +175,10 @@ jobs:
             "platforms;android-33" \
             "build-tools;33.0.2"
 
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-
       # ======================================================
-      # 9. VERIFY EXACT BUILD TOOLS
+      # 9. INSTALL EXACT NDK r28c
       # ======================================================
-      - name: Verify Android SDK
-        run: |
-          set -eux
-
-          echo "========================================"
-          echo "INSTALLED ANDROID SDK"
-          echo "========================================"
-
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --list_installed || true
-
-          echo "========================================"
-          echo "BUILD TOOLS"
-          echo "========================================"
-
-          ls -lah "$ANDROID_HOME/build-tools"
-
-          test -d "$ANDROID_HOME/build-tools/33.0.2"
-
-          echo "========================================"
-          echo "AIDL"
-          echo "========================================"
-
-          test -x "$ANDROID_HOME/build-tools/33.0.2/aidl"
-
-          "$ANDROID_HOME/build-tools/33.0.2/aidl" --version
-
-      # ======================================================
-      # 10. INSTALL EXACT NDK 28c
-      # ======================================================
-      - name: Install Android NDK 28c
+      - name: Install Android NDK r28c
         run: |
           set -eux
 
@@ -213,26 +191,88 @@ jobs:
 
           test -d "$ANDROID_HOME/ndk/28.2.13676358"
 
-          echo "NDK installed:"
-          ls -lah "$ANDROID_HOME/ndk/28.2.13676358"
+          echo "========================================"
+          echo "NDK"
+          echo "========================================"
+
+          cat "$ANDROID_HOME/ndk/28.2.13676358/source.properties"
 
       # ======================================================
-      # 11. SET NDK ENVIRONMENT
+      # 10. CONFIGURE ANDROID ENVIRONMENT
       # ======================================================
-      - name: Configure Android NDK
+      - name: Configure Android environment
         run: |
           set -eux
 
-          NDK_PATH="$ANDROID_HOME/ndk/28.2.13676358"
+          echo "ANDROIDSDK=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROIDSDK=$ANDROID_HOME" >> "$GITHUB_ENV"
 
-          echo "ANDROID_NDK_ROOT=$NDK_PATH" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_HOME=$NDK_PATH" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK=$NDK_PATH" >> "$GITHUB_ENV"
-
-          echo "$NDK_PATH" >> "$GITHUB_PATH"
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
 
       # ======================================================
-      # 12. VERIFY BUILDOZER SPEC
+      # 11. VERIFY ANDROID SDK
+      # ======================================================
+      - name: Verify Android SDK
+        run: |
+          set -eux
+
+          echo "========================================"
+          echo "ANDROID SDK"
+          echo "========================================"
+
+          test -d "$ANDROID_HOME/platforms/android-33"
+          test -d "$ANDROID_HOME/build-tools/33.0.2"
+          test -x "$ANDROID_HOME/build-tools/33.0.2/aidl"
+
+          echo "========================================"
+          echo "BUILD TOOLS 33.0.2"
+          echo "========================================"
+
+          ls -lah "$ANDROID_HOME/build-tools/33.0.2"
+
+          echo "========================================"
+          echo "AIDL"
+          echo "========================================"
+
+          test -x "$ANDROID_HOME/build-tools/33.0.2/aidl"
+
+          # DO NOT USE:
+          # aidl --version
+          #
+          # Build-Tools 33 AIDL does not support that test.
+          #
+          # Instead only verify that the executable exists.
+          file "$ANDROID_HOME/build-tools/33.0.2/aidl"
+
+          echo "AIDL executable exists."
+
+      # ======================================================
+      # 12. VERIFY NDK
+      # ======================================================
+      - name: Verify NDK
+        run: |
+          set -eux
+
+          NDK="$ANDROID_HOME/ndk/28.2.13676358"
+
+          test -d "$NDK"
+
+          echo "========================================"
+          echo "NDK SOURCE.PROPERTIES"
+          echo "========================================"
+
+          cat "$NDK/source.properties"
+
+          echo "========================================"
+          echo "NDK TOOLCHAIN"
+          echo "========================================"
+
+          test -d "$NDK/toolchains/llvm"
+
+      # ======================================================
+      # 13. VERIFY BUILDOZER SPEC
       # ======================================================
       - name: Verify buildozer.spec
         run: |
@@ -247,38 +287,52 @@ jobs:
           cat buildozer.spec
 
           echo "========================================"
-          echo "CHECK TOOLCHAIN SETTINGS"
+          echo "CHECK REQUIRED SETTINGS"
           echo "========================================"
 
           grep -E \
-            'android.api|android.minapi|android.ndk|android.build_tools_version|android.archs|requirements' \
+            'android.api|android.minapi|android.ndk|android.ndk_api|android.build_tools_version|android.archs|requirements' \
             buildozer.spec
 
           echo "========================================"
-          echo "ENSURE NO BUILD-TOOLS 37"
+          echo "CHECK FOR FORCED BUILD-TOOLS 37"
           echo "========================================"
 
-          if grep -R "37\.0\.0\|build-tools;37" buildozer.spec .github/workflows; then
-            echo "ERROR: Build-Tools 37 reference found."
+          if grep -R \
+            -E 'build-tools;37|build-tools/37|build_tools_version *= *37|android.build_tools_version *= *37' \
+            buildozer.spec .github/workflows; then
+
+            echo "ERROR: BUILD-TOOLS 37 REFERENCE FOUND."
             exit 1
           fi
 
+          echo "No Build-Tools 37 reference found."
+
       # ======================================================
-      # 13. CLEAN OLD BUILDOZER CACHE
+      # 14. CLEAN PROJECT BUILDOZER CACHE
       #
-      # Prevents old SDK / NDK / p4a state from previous
-      # failed builds from interfering.
+      # IMPORTANT:
+      # Do this BEFORE Buildozer starts.
       # ======================================================
-      - name: Clean Buildozer state
+      - name: Clean project Buildozer state
         run: |
           set -eux
 
           rm -rf .buildozer
+          rm -rf bin
 
           mkdir -p .buildozer
+          mkdir -p bin
 
       # ======================================================
-      # 14. BUILD APK
+      # 15. BUILD
+      #
+      # Buildozer will use:
+      #
+      # API        33
+      # BuildTools 33.0.2
+      # NDK        r28c
+      #
       # ======================================================
       - name: Build Android APK
         run: |
@@ -289,7 +343,7 @@ jobs:
           buildozer -v android debug
 
       # ======================================================
-      # 15. FIND APK
+      # 16. SEARCH APK
       # ======================================================
       - name: Find APK
         if: always()
@@ -297,9 +351,10 @@ jobs:
           set +e
 
           echo "========================================"
-          echo "APK SEARCH"
+          echo "APK / AAB SEARCH"
           echo "========================================"
 
+          echo "Current directory:"
           pwd
 
           echo ""
@@ -311,7 +366,7 @@ jobs:
           find . -type f -name "*.aab" -print
 
           echo ""
-          echo "Bin directory:"
+          echo "bin directory:"
           ls -lah bin 2>/dev/null || true
 
           echo ""
@@ -319,19 +374,18 @@ jobs:
           ls -lah .buildozer 2>/dev/null || true
 
       # ======================================================
-      # 16. UPLOAD APK
+      # 17. UPLOAD APK
       # ======================================================
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: MoneyTracker-APK
-          path: |
-            bin/*.apk
+          path: bin/*.apk
           if-no-files-found: error
 
       # ======================================================
-      # 17. UPLOAD BUILD LOGS IF BUILD FAILS
+      # 18. UPLOAD BUILDOZER LOGS ON FAILURE
       # ======================================================
       - name: Upload Buildozer logs
         if: failure()
