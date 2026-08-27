@@ -23,9 +23,7 @@ env:
 
 jobs:
   build-apk:
-
     name: Build MoneyTracker APK
-
     runs-on: ubuntu-22.04
 
     steps:
@@ -41,9 +39,8 @@ jobs:
       # ============================================================
       # 2. JAVA 17
       #
-      # IMPORTANT:
-      # No Gradle cache.
-      # This prevents setup-java from searching for Gradle files.
+      # KEEP SIMPLE.
+      # NO CACHE SETTING.
       # ============================================================
 
       - name: Setup Java 17
@@ -51,27 +48,22 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-          cache: none
 
 
       # ============================================================
-      # 3. PYTHON 3.11
+      # 3. PYTHON 3.11.13
       #
-      # IMPORTANT:
-      # No dependency cache.
-      # setup-python must NOT search for requirements.txt
-      # or pyproject.toml.
+      # NO CACHE SETTING.
       # ============================================================
 
       - name: Setup Python 3.11.13
         uses: actions/setup-python@v6
         with:
           python-version: "3.11.13"
-          cache: ""
 
 
       # ============================================================
-      # 4. VERIFY BASIC ENVIRONMENT
+      # 4. VERIFY PYTHON + JAVA
       # ============================================================
 
       - name: Verify Python and Java
@@ -79,16 +71,16 @@ jobs:
         run: |
           set -eux
 
-          echo "================================================"
+          echo "========================================"
           echo "PYTHON"
-          echo "================================================"
+          echo "========================================"
 
           python --version
           python -m pip --version
 
-          echo "================================================"
+          echo "========================================"
           echo "JAVA"
-          echo "================================================"
+          echo "========================================"
 
           java -version
 
@@ -146,23 +138,21 @@ jobs:
             "buildozer==1.6.0" \
             "python-for-android==2026.5.9"
 
-          echo "================================================"
+          echo "========================================"
           echo "BUILDOZER"
-          echo "================================================"
+          echo "========================================"
 
           buildozer --version
 
-          echo "================================================"
+          echo "========================================"
           echo "P4A"
-          echo "================================================"
+          echo "========================================"
 
           p4a --version
 
 
       # ============================================================
-      # 7. LOCATE BUILDOZER PROJECT
-      #
-      # buildozer.spec is searched automatically.
+      # 7. FIND PROJECT
       # ============================================================
 
       - name: Locate Buildozer project
@@ -170,9 +160,9 @@ jobs:
         run: |
           set -eux
 
-          echo "================================================"
+          echo "========================================"
           echo "SEARCHING FOR BUILDOZER.SPEC"
-          echo "================================================"
+          echo "========================================"
 
           SPEC_FILE="$(
             find "$GITHUB_WORKSPACE" \
@@ -184,9 +174,7 @@ jobs:
 
           if [ -z "$SPEC_FILE" ]; then
 
-            echo "ERROR: buildozer.spec was not found."
-
-            echo "Repository contents:"
+            echo "ERROR: buildozer.spec not found."
 
             find "$GITHUB_WORKSPACE" \
               -maxdepth 6 \
@@ -195,6 +183,7 @@ jobs:
               | head -500
 
             exit 1
+
           fi
 
           PROJECT_DIR="$(dirname "$SPEC_FILE")"
@@ -206,27 +195,27 @@ jobs:
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-          echo "================================================"
+          echo "========================================"
           echo "PROJECT CONTENT"
-          echo "================================================"
+          echo "========================================"
 
           ls -lah "$PROJECT_DIR"
 
 
       # ============================================================
-      # 8. PREPARE BUILDOZER DEFAULT ANDROID SDK
+      # 8. CREATE BUILDOZER DEFAULT SDK DIRECTORY
       #
-      # THIS IS THE IMPORTANT FIX.
+      # IMPORTANT:
       #
-      # We do NOT use:
-      #
-      # /usr/local/lib/android/sdk
-      #
-      # as Buildozer's SDK.
-      #
-      # We use Buildozer's own/default SDK directory:
+      # Buildozer itself expects:
       #
       # /home/runner/.buildozer/android/platform/android-sdk
+      #
+      # Therefore THAT becomes the Android SDK used by Buildozer.
+      #
+      # We do NOT point Buildozer to:
+      #
+      # /usr/local/lib/android/sdk
       #
       # ============================================================
 
@@ -237,19 +226,19 @@ jobs:
 
           BUILDOZER_SDK="$HOME/.buildozer/android/platform/android-sdk"
 
-          echo "================================================"
+          HOST_SDK="/usr/local/lib/android/sdk"
+
+          echo "========================================"
           echo "BUILDOZER DEFAULT SDK"
-          echo "================================================"
+          echo "========================================"
 
           echo "BUILDOZER_SDK=$BUILDOZER_SDK"
 
           mkdir -p "$BUILDOZER_SDK"
 
-          echo "================================================"
-          echo "COPY ANDROID COMMAND LINE TOOLS"
-          echo "================================================"
-
-          HOST_SDK="/usr/local/lib/android/sdk"
+          echo "========================================"
+          echo "COPY COMMAND LINE TOOLS"
+          echo "========================================"
 
           test -d "$HOST_SDK"
 
@@ -266,10 +255,9 @@ jobs:
 
           else
 
-            echo "ERROR: Android command-line tools were not found."
+            echo "ERROR: Android command line tools not found."
 
             find "$HOST_SDK" \
-              -maxdepth 4 \
               -type f \
               -name sdkmanager \
               -print
@@ -278,34 +266,22 @@ jobs:
 
           fi
 
-          echo "================================================"
-          echo "SET BUILDOZER SDK ENVIRONMENT"
-          echo "================================================"
+          echo "========================================"
+          echo "BUILDOZER SDKMANAGER"
+          echo "========================================"
 
-          echo "ANDROID_HOME=$BUILDOZER_SDK" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$BUILDOZER_SDK" >> "$GITHUB_ENV"
-          echo "ANDROIDSDK=$BUILDOZER_SDK" >> "$GITHUB_ENV"
+          SDKMANAGER="$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager"
 
-          echo "PATH=$BUILDOZER_SDK/cmdline-tools/latest/bin:$BUILDOZER_SDK/platform-tools:$BUILDOZER_SDK/build-tools/$ANDROID_BUILD_TOOLS:$PATH" \
-            >> "$GITHUB_ENV"
+          test -x "$SDKMANAGER"
 
-          echo "================================================"
-          echo "BUILDOZER SDK ENVIRONMENT READY"
-          echo "================================================"
-
-          echo "ANDROID_HOME=$BUILDOZER_SDK"
+          "$SDKMANAGER" --version || true
 
 
       # ============================================================
-      # 9. INSTALL AND ACCEPT LICENSES INSIDE BUILDOZER SDK
-      #
-      # EVERYTHING HERE GOES INTO:
-      #
-      # /home/runner/.buildozer/android/platform/android-sdk
-      #
+      # 9. INSTALL 37 + PLATFORM + NDK INTO BUILDOZER SDK
       # ============================================================
 
-      - name: Install Android packages into Buildozer SDK
+      - name: Install Android components in Buildozer SDK
         shell: bash
         run: |
           set -eux
@@ -316,60 +292,53 @@ jobs:
 
           test -x "$SDKMANAGER"
 
-          echo "================================================"
-          echo "BUILDOZER SDKMANAGER"
-          echo "================================================"
-
-          echo "$SDKMANAGER"
-
-          "$SDKMANAGER" --version || true
-
-          echo "================================================"
+          echo "========================================"
           echo "ACCEPT LICENSES"
-          echo "================================================"
+          echo "========================================"
 
           yes | "$SDKMANAGER" \
             --sdk_root="$BUILDOZER_SDK" \
             --licenses \
             || true
 
-          echo "================================================"
-          echo "INSTALL BUILD TOOLS 37"
-          echo "================================================"
+          echo "========================================"
+          echo "INSTALL BUILD TOOLS 37.0.0"
+          echo "========================================"
 
           "$SDKMANAGER" \
             --sdk_root="$BUILDOZER_SDK" \
-            "build-tools;${ANDROID_BUILD_TOOLS}"
+            "build-tools;37.0.0"
 
-          echo "================================================"
-          echo "INSTALL ANDROID PLATFORM 33"
-          echo "================================================"
+          echo "========================================"
+          echo "INSTALL PLATFORM TOOLS"
+          echo "========================================"
 
           "$SDKMANAGER" \
             --sdk_root="$BUILDOZER_SDK" \
-            "platform-tools" \
-            "platforms;android-${ANDROID_API}"
+            "platform-tools"
 
-          echo "================================================"
+          echo "========================================"
+          echo "INSTALL ANDROID API 33"
+          echo "========================================"
+
+          "$SDKMANAGER" \
+            --sdk_root="$BUILDOZER_SDK" \
+            "platforms;android-33"
+
+          echo "========================================"
           echo "INSTALL NDK 28.2.13676358"
-          echo "================================================"
+          echo "========================================"
 
           "$SDKMANAGER" \
             --sdk_root="$BUILDOZER_SDK" \
-            "ndk;${ANDROID_NDK_VERSION}"
-
-          echo "================================================"
-          echo "ANDROID PACKAGES INSTALLED"
-          echo "================================================"
+            "ndk;28.2.13676358"
 
 
       # ============================================================
-      # 10. ACCEPT LICENSES AGAIN AFTER INSTALL
-      #
-      # This ensures Buildozer's SDK has accepted licenses.
+      # 10. ACCEPT LICENSES AFTER INSTALL
       # ============================================================
 
-      - name: Verify Buildozer SDK licenses
+      - name: Verify Android licenses
         shell: bash
         run: |
           set -eux
@@ -378,163 +347,149 @@ jobs:
 
           SDKMANAGER="$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager"
 
-          echo "================================================"
-          echo "LICENSE DIRECTORY"
-          echo "================================================"
-
-          ls -lah "$BUILDOZER_SDK/licenses" || true
-
-          echo "================================================"
-          echo "ACCEPT ALL LICENSES"
-          echo "================================================"
+          echo "========================================"
+          echo "ANDROID LICENSES"
+          echo "========================================"
 
           yes | "$SDKMANAGER" \
             --sdk_root="$BUILDOZER_SDK" \
             --licenses \
             || true
 
-          echo "================================================"
-          echo "LICENSES COMPLETE"
-          echo "================================================"
+          echo "========================================"
+          echo "LICENSE FILES"
+          echo "========================================"
 
-          ls -lah "$BUILDOZER_SDK/licenses" || true
+          ls -lah \
+            "$BUILDOZER_SDK/licenses" \
+            || true
 
 
       # ============================================================
-      # 11. CONFIGURE ALL ANDROID VARIABLES TO BUILDOZER SDK
+      # 11. SET ENVIRONMENT TO BUILDOZER SDK
       #
-      # IMPORTANT:
-      # Buildozer and p4a will see ONLY this Android SDK path.
+      # EVERYTHING USES:
+      #
+      # /home/runner/.buildozer/android/platform/android-sdk
+      #
       # ============================================================
 
-      - name: Configure Buildozer Android paths
+      - name: Configure Buildozer Android environment
         shell: bash
         run: |
           set -eux
 
           BUILDOZER_SDK="$HOME/.buildozer/android/platform/android-sdk"
 
-          BUILD_TOOLS_DIR="$BUILDOZER_SDK/build-tools/${ANDROID_BUILD_TOOLS}"
+          BUILD_TOOLS_DIR="$BUILDOZER_SDK/build-tools/37.0.0"
 
-          NDK_DIR="$BUILDOZER_SDK/ndk/${ANDROID_NDK_VERSION}"
+          NDK_DIR="$BUILDOZER_SDK/ndk/28.2.13676358"
 
-          echo "================================================"
-          echo "VERIFY BUILDOZER SDK PATH"
-          echo "================================================"
+          echo "========================================"
+          echo "CONFIGURING BUILDOZER SDK"
+          echo "========================================"
 
-          echo "ANDROID_HOME=$BUILDOZER_SDK"
-          echo "ANDROID_SDK_ROOT=$BUILDOZER_SDK"
-          echo "ANDROIDSDK=$BUILDOZER_SDK"
-
-          echo "================================================"
-          echo "VERIFY BUILD TOOLS 37"
-          echo "================================================"
-
-          test -d "$BUILD_TOOLS_DIR"
-
-          test -x "$BUILD_TOOLS_DIR/aidl"
-
-          test -x "$BUILD_TOOLS_DIR/aapt2"
-
-          echo "BUILD_TOOLS_DIR=$BUILD_TOOLS_DIR"
-
-          echo "================================================"
-          echo "VERIFY NDK"
-          echo "================================================"
-
-          test -d "$NDK_DIR"
-
-          echo "NDK_DIR=$NDK_DIR"
-
-          echo "================================================"
-          echo "EXPORT NDK"
-          echo "================================================"
+          echo "ANDROID_HOME=$BUILDOZER_SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$BUILDOZER_SDK" >> "$GITHUB_ENV"
+          echo "ANDROIDSDK=$BUILDOZER_SDK" >> "$GITHUB_ENV"
 
           echo "ANDROID_NDK=$NDK_DIR" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_ROOT=$NDK_DIR" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_HOME=$NDK_DIR" >> "$GITHUB_ENV"
 
-          echo "================================================"
-          echo "EXPORT BUILD TOOLS"
-          echo "================================================"
+          echo "ANDROID_BUILD_TOOLS=37.0.0" >> "$GITHUB_ENV"
 
-          echo "ANDROID_BUILD_TOOLS=$ANDROID_BUILD_TOOLS" >> "$GITHUB_ENV"
+          echo "$BUILDOZER_SDK/cmdline-tools/latest/bin" \
+            >> "$GITHUB_PATH"
 
-          echo "$BUILDOZER_SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          echo "$BUILDOZER_SDK/platform-tools" >> "$GITHUB_PATH"
-          echo "$BUILD_TOOLS_DIR" >> "$GITHUB_PATH"
+          echo "$BUILDOZER_SDK/platform-tools" \
+            >> "$GITHUB_PATH"
 
-          echo "================================================"
-          echo "BUILDOZER ANDROID PATH READY"
-          echo "================================================"
+          echo "$BUILD_TOOLS_DIR" \
+            >> "$GITHUB_PATH"
+
+          echo "========================================"
+          echo "BUILDOZER SDK CONFIGURED"
+          echo "========================================"
+
+          echo "SDK=$BUILDOZER_SDK"
+          echo "BUILD_TOOLS=$BUILD_TOOLS_DIR"
+          echo "NDK=$NDK_DIR"
 
 
       # ============================================================
-      # 12. VERIFY BUILDOZER WILL USE THE CORRECT SDK
+      # 12. VERIFY BUILD TOOLS 37 / AIDL / AAPT2 / NDK
       # ============================================================
 
-      - name: Verify Buildozer Android environment
+      - name: Verify Buildozer Android SDK
         shell: bash
         run: |
           set -eux
 
-          echo "================================================"
-          echo "ANDROID ENVIRONMENT"
-          echo "================================================"
+          BUILDOZER_SDK="$HOME/.buildozer/android/platform/android-sdk"
+
+          echo "========================================"
+          echo "ANDROID HOME"
+          echo "========================================"
 
           echo "ANDROID_HOME=$ANDROID_HOME"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
           echo "ANDROIDSDK=$ANDROIDSDK"
 
-          echo "================================================"
-          echo "EXPECTED BUILDOZER SDK"
-          echo "================================================"
+          test "$ANDROID_HOME" = "$BUILDOZER_SDK"
+          test "$ANDROID_SDK_ROOT" = "$BUILDOZER_SDK"
+          test "$ANDROIDSDK" = "$BUILDOZER_SDK"
 
-          EXPECTED="$HOME/.buildozer/android/platform/android-sdk"
-
-          test "$ANDROID_HOME" = "$EXPECTED"
-          test "$ANDROID_SDK_ROOT" = "$EXPECTED"
-          test "$ANDROIDSDK" = "$EXPECTED"
-
-          echo "Buildozer SDK path: CORRECT"
-
-          echo "================================================"
-          echo "BUILD TOOLS"
-          echo "================================================"
+          echo "========================================"
+          echo "BUILD TOOLS 37"
+          echo "========================================"
 
           test -d \
-            "$EXPECTED/build-tools/37.0.0"
+            "$BUILDOZER_SDK/build-tools/37.0.0"
 
-          test -x \
-            "$EXPECTED/build-tools/37.0.0/aidl"
+          echo "Build Tools 37.0.0: INSTALLED"
 
-          test -x \
-            "$EXPECTED/build-tools/37.0.0/aapt2"
-
-          echo "Build Tools 37.0.0: READY"
-
-          echo "================================================"
+          echo "========================================"
           echo "AIDL"
-          echo "================================================"
+          echo "========================================"
 
-          "$EXPECTED/build-tools/37.0.0/aidl" \
+          test -x \
+            "$BUILDOZER_SDK/build-tools/37.0.0/aidl"
+
+          "$BUILDOZER_SDK/build-tools/37.0.0/aidl" \
             --version \
             || true
 
-          echo "================================================"
-          echo "AAPT2"
-          echo "================================================"
+          echo "AIDL: READY"
 
-          "$EXPECTED/build-tools/37.0.0/aapt2" \
+          echo "========================================"
+          echo "AAPT2"
+          echo "========================================"
+
+          test -x \
+            "$BUILDOZER_SDK/build-tools/37.0.0/aapt2"
+
+          "$BUILDOZER_SDK/build-tools/37.0.0/aapt2" \
             version \
             || true
 
-          echo "================================================"
-          echo "NDK"
-          echo "================================================"
+          echo "AAPT2: READY"
+
+          echo "========================================"
+          echo "ANDROID API 33"
+          echo "========================================"
 
           test -d \
-            "$EXPECTED/ndk/28.2.13676358"
+            "$BUILDOZER_SDK/platforms/android-33"
+
+          echo "Android API 33: READY"
+
+          echo "========================================"
+          echo "NDK"
+          echo "========================================"
+
+          test -d \
+            "$BUILDOZER_SDK/ndk/28.2.13676358"
 
           echo "NDK 28.2.13676358: READY"
 
@@ -549,9 +504,9 @@ jobs:
         run: |
           set -eux
 
-          echo "================================================"
+          echo "========================================"
           echo "BUILDOZER SPEC"
-          echo "================================================"
+          echo "========================================"
 
           test -f buildozer.spec
 
@@ -560,48 +515,14 @@ jobs:
             buildozer.spec \
             || true
 
-          echo "================================================"
-          echo "BUILD TOOLS SETTING"
-          echo "================================================"
-
-          if grep -Eq \
-            '^[[:space:]]*android\.build_tools_version[[:space:]]*=' \
-            buildozer.spec
-          then
-
-            grep -n \
-              'android.build_tools_version' \
-              buildozer.spec
-
-          else
-
-            echo "WARNING: android.build_tools_version is not explicitly present."
-
-            echo "Build environment is configured for:"
-            echo "37.0.0"
-
-          fi
-
-          echo "================================================"
-          echo "NDK SETTING"
-          echo "================================================"
-
-          grep -n \
-            'android.ndk' \
-            buildozer.spec \
-            || true
-
 
       # ============================================================
-      # 14. CLEAN OLD BUILDOZER BUILD CACHE
+      # 14. CLEAN PROJECT BUILDOZER CACHE
       #
-      # IMPORTANT:
       # Source files are NOT deleted.
-      #
-      # Only old generated Buildozer build data is removed.
       # ============================================================
 
-      - name: Clean old Buildozer build cache
+      - name: Clean project Buildozer cache
         shell: bash
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
@@ -611,46 +532,55 @@ jobs:
 
           mkdir -p bin
 
-          echo "================================================"
-          echo "OLD PROJECT BUILD CACHE CLEANED"
-          echo "================================================"
+          echo "========================================"
+          echo "BUILDOZER PROJECT CACHE CLEANED"
+          echo "========================================"
 
           echo "Source files preserved."
 
 
       # ============================================================
-      # 15. RE-CREATE BUILDOZER SDK ENVIRONMENT AFTER CLEAN
-      #
-      # The previous step removes PROJECT_DIR/.buildozer only.
-      #
-      # The SDK remains in:
-      #
-      # $HOME/.buildozer/android/platform/android-sdk
-      #
+      # 15. FINAL ENVIRONMENT CHECK
       # ============================================================
 
-      - name: Final Android SDK verification before Buildozer
+      - name: Final Buildozer environment check
         shell: bash
         run: |
           set -eux
 
           BUILDOZER_SDK="$HOME/.buildozer/android/platform/android-sdk"
 
-          echo "================================================"
-          echo "FINAL BUILDOZER SDK"
-          echo "================================================"
+          echo "========================================"
+          echo "FINAL ENVIRONMENT"
+          echo "========================================"
+
+          python --version
+
+          java -version
+
+          buildozer --version
+
+          p4a --version
+
+          echo "========================================"
+          echo "ANDROID PATH"
+          echo "========================================"
 
           echo "ANDROID_HOME=$ANDROID_HOME"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
           echo "ANDROIDSDK=$ANDROIDSDK"
 
-          test "$ANDROID_HOME" = "$BUILDOZER_SDK"
-          test "$ANDROID_SDK_ROOT" = "$BUILDOZER_SDK"
-          test "$ANDROIDSDK" = "$BUILDOZER_SDK"
+          echo "========================================"
+          echo "VERIFY BUILDOZER DEFAULT SDK"
+          echo "========================================"
 
-          echo "================================================"
-          echo "BUILD TOOLS 37"
-          echo "================================================"
+          test "$ANDROID_HOME" = "$BUILDOZER_SDK"
+
+          echo "Buildozer SDK path: CORRECT"
+
+          echo "========================================"
+          echo "VERIFY BUILD TOOLS 37"
+          echo "========================================"
 
           test -d \
             "$BUILDOZER_SDK/build-tools/37.0.0"
@@ -658,33 +588,26 @@ jobs:
           test -x \
             "$BUILDOZER_SDK/build-tools/37.0.0/aidl"
 
-          echo "Build Tools 37.0.0: VERIFIED"
+          test -x \
+            "$BUILDOZER_SDK/build-tools/37.0.0/aapt2"
 
-          echo "================================================"
-          echo "NDK"
-          echo "================================================"
+          echo "Build Tools 37.0.0: READY"
+
+          echo "========================================"
+          echo "VERIFY NDK"
+          echo "========================================"
 
           test -d \
             "$BUILDOZER_SDK/ndk/28.2.13676358"
 
-          echo "NDK 28.2.13676358: VERIFIED"
-
-          echo "================================================"
-          echo "LICENSES"
-          echo "================================================"
-
-          test -d \
-            "$BUILDOZER_SDK/licenses"
-
-          ls -lah "$BUILDOZER_SDK/licenses"
+          echo "NDK 28.2.13676358: READY"
 
 
       # ============================================================
       # 16. BUILD APK
       #
-      # MANUAL WORKFLOW ONLY.
-      #
-      # Nothing automatically triggers this workflow.
+      # MANUAL ONLY:
+      # workflow_dispatch
       # ============================================================
 
       - name: Build MoneyTracker APK
@@ -693,65 +616,66 @@ jobs:
         run: |
           set -eux
 
-          echo "================================================"
-          echo "FINAL BUILD ENVIRONMENT"
-          echo "================================================"
+          BUILDOZER_SDK="$HOME/.buildozer/android/platform/android-sdk"
 
+          echo "========================================"
+          echo "STARTING APK BUILD"
+          echo "========================================"
+
+          echo "Python:"
           python --version
+
+          echo "Java:"
           java -version
+
+          echo "Buildozer:"
           buildozer --version
+
+          echo "P4A:"
           p4a --version
 
-          echo "================================================"
-          echo "ANDROID PATHS"
-          echo "================================================"
+          echo "========================================"
+          echo "ANDROID SDK"
+          echo "========================================"
 
           echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          echo "ANDROIDSDK=$ANDROIDSDK"
 
-          echo "ANDROID_NDK=$ANDROID_NDK"
-          echo "ANDROID_NDK_ROOT=$ANDROID_NDK_ROOT"
-          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
+          test "$ANDROID_HOME" = "$BUILDOZER_SDK"
 
-          echo "ANDROID_BUILD_TOOLS=$ANDROID_BUILD_TOOLS"
-
-          echo "================================================"
-          echo "FINAL BUILDOZER SDK CHECK"
-          echo "================================================"
-
-          test \
-            "$ANDROID_HOME" = \
-            "$HOME/.buildozer/android/platform/android-sdk"
+          echo "========================================"
+          echo "BUILD TOOLS"
+          echo "========================================"
 
           test -d \
-            "$ANDROID_HOME/build-tools/37.0.0"
+            "$BUILDOZER_SDK/build-tools/37.0.0"
 
           test -x \
-            "$ANDROID_HOME/build-tools/37.0.0/aidl"
+            "$BUILDOZER_SDK/build-tools/37.0.0/aidl"
 
-          test -x \
-            "$ANDROID_HOME/build-tools/37.0.0/aapt2"
+          echo "Build Tools 37.0.0 confirmed."
+
+          echo "========================================"
+          echo "NDK"
+          echo "========================================"
 
           test -d \
-            "$ANDROID_HOME/ndk/28.2.13676358"
+            "$BUILDOZER_SDK/ndk/28.2.13676358"
 
-          test -d \
-            "$ANDROID_HOME/platforms/android-33"
+          echo "NDK confirmed."
 
-          echo "================================================"
-          echo "START BUILDOZER"
-          echo "================================================"
+          echo "========================================"
+          echo "RUNNING BUILDOZER"
+          echo "========================================"
 
           buildozer -v android debug
 
-          echo "================================================"
+          echo "========================================"
           echo "BUILDOZER BUILD FINISHED"
-          echo "================================================"
+          echo "========================================"
 
 
       # ============================================================
-      # 17. VERIFY APK
+      # 17. FIND APK
       # ============================================================
 
       - name: Verify generated APK
@@ -760,9 +684,9 @@ jobs:
         run: |
           set -eux
 
-          echo "================================================"
+          echo "========================================"
           echo "SEARCHING FOR APK"
-          echo "================================================"
+          echo "========================================"
 
           find . \
             -type f \
@@ -780,29 +704,19 @@ jobs:
 
             echo "ERROR: APK was not generated."
 
-            echo "================================================"
-            echo "BIN DIRECTORY"
-            echo "================================================"
+            echo "========================================"
+            echo "BIN"
+            echo "========================================"
 
             ls -lah bin || true
-
-            echo "================================================"
-            echo "BUILD DIRECTORY"
-            echo "================================================"
-
-            find .buildozer \
-              -maxdepth 5 \
-              -type f \
-              | head -300 \
-              || true
 
             exit 1
 
           fi
 
-          echo "================================================"
+          echo "========================================"
           echo "APK FOUND"
-          echo "================================================"
+          echo "========================================"
 
           echo "$APK_FILE"
 
@@ -823,15 +737,15 @@ jobs:
 
 
       # ============================================================
-      # 19. SUCCESS
+      # 19. BUILD SUCCESS
       # ============================================================
 
       - name: Build complete
         shell: bash
         run: |
-          echo "================================================"
+          echo "========================================"
           echo "MONEYTRACKER APK BUILD COMPLETED"
-          echo "================================================"
+          echo "========================================"
 
           echo "Build Tools: 37.0.0"
           echo "Android API: 33"
@@ -841,8 +755,8 @@ jobs:
           echo "Buildozer: 1.6.0"
           echo "P4A: 2026.05.09"
 
-          echo "================================================"
+          echo "========================================"
           echo "APK ARTIFACT"
-          echo "================================================"
+          echo "========================================"
 
           echo "MoneyTracker-APK"
