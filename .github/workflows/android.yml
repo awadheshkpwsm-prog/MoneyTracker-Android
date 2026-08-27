@@ -677,14 +677,21 @@ jobs:
       # 18. BUILD APK
       # ============================================================
 
-          
+       - name: Verify python-for-android
+         shell: bash
+         run: |
+           python - << 'PY'
+           import pythonforandroid
+           print("python-for-android loaded successfully")
+           print("module:", pythonforandroid.__file__)
+           PY
 
 
         
-      - name: Build MoneyTracker APK
-        shell: bash
-        working-directory: ${{ env.PROJECT_DIR }}
-        run: |
+        - name: Build MoneyTracker APK
+         shell: bash
+         working-directory: ${{ env.PROJECT_DIR }}
+         run: |
           set -eux
 
           echo "========================================"
