@@ -378,6 +378,112 @@ jobs:
       # BUILD APK
       # ============================================================
 
+          # ============================================================
+      # DIAGNOSTIC ONLY - CHECK AND STOP
+      # APK BUILD MUST NOT RUN
+      # ============================================================
+
+      - name: Diagnose Buildozer Internal Android Tools - STOP
+        shell: bash
+        run: |
+          set -eux
+
+          echo "========================================"
+          echo "BUILDOZER VERSION"
+          echo "========================================"
+          buildozer --version
+
+          echo "========================================"
+          echo "PYTHON VERSION"
+          echo "========================================"
+          python --version
+          python -m pip --version
+
+          echo "========================================"
+          echo "PYTHON-FOR-ANDROID VERSION"
+          echo "========================================"
+          python -m pip show python-for-android || true
+
+          echo "========================================"
+          echo "INTERNAL BUILDOZER SDK"
+          echo "========================================"
+
+          INTERNAL_SDK="$HOME/.buildozer/android/platform/android-sdk"
+
+          echo "INTERNAL_SDK=$INTERNAL_SDK"
+
+          if [ -d "$INTERNAL_SDK" ]; then
+            echo "Internal SDK: FOUND"
+          else
+            echo "Internal SDK: NOT FOUND"
+          fi
+
+          echo "========================================"
+          echo "INSTALLED BUILD TOOLS"
+          echo "========================================"
+
+          if [ -d "$INTERNAL_SDK/build-tools" ]; then
+            find "$INTERNAL_SDK/build-tools" \
+              -mindepth 1 \
+              -maxdepth 1 \
+              -type d \
+              -printf '%f\n' \
+              | sort -V
+          else
+            echo "Internal build-tools directory does not exist."
+          fi
+
+          echo "========================================"
+          echo "SDKMANAGER VERSION"
+          echo "========================================"
+
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+
+          "$SDKMANAGER" --version
+
+          echo "========================================"
+          echo "AVAILABLE BUILD TOOLS"
+          echo "========================================"
+
+          "$SDKMANAGER" --list 2>/dev/null \
+            | grep -E '^[[:space:]]*build-tools;' \
+            | head -100 || true
+
+          echo "========================================"
+          echo "ANDROID ENVIRONMENT"
+          echo "========================================"
+
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          echo "ANDROIDSDK=${ANDROIDSDK:-NOT_SET}"
+
+          echo "========================================"
+          echo "BUILD CONFIGURATION"
+          echo "========================================"
+
+          echo "ANDROID_API=$ANDROID_API"
+          echo "ANDROID_MIN_API=$ANDROID_MIN_API"
+          echo "ANDROID_BUILD_TOOLS=$ANDROID_BUILD_TOOLS"
+          echo "ANDROID_NDK_VERSION=$ANDROID_NDK_VERSION"
+
+          echo "========================================"
+          echo "SPEC ANDROID SETTINGS"
+          echo "========================================"
+
+          grep -n \
+            -E 'android\.build_tools_version|android\.api|android\.minapi|android\.ndk' \
+            buildozer.spec || true
+
+          echo "========================================"
+          echo "DIAGNOSTIC COMPLETE"
+          echo "========================================"
+          echo "APK BUILD WILL NOT RUN"
+          echo "WORKFLOW STOPPED INTENTIONALLY"
+          echo "========================================"
+
+          exit 1
+
+
       - name: Build Money Tracker APK
         shell: bash
         run: |
