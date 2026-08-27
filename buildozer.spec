@@ -40,8 +40,8 @@ android.allow_backup = True
 # PYTHON-FOR-ANDROID
 # ============================================================
 
-p4a.fork = kivy
-# p4a.branch = master
+
+
 p4a.bootstrap = sdl2
 
 
