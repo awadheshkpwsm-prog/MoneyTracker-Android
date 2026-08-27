@@ -33,8 +33,6 @@ jobs:
 
       # ==========================================================
       # JAVA 17
-      # IMPORTANT:
-      # No Gradle cache because this is a Buildozer project.
       # ==========================================================
       - name: Setup Java 17
         uses: actions/setup-java@v5
@@ -45,14 +43,13 @@ jobs:
 
 
       # ==========================================================
-      # PYTHON 3.11
+      # PYTHON 3.11.13
       # ==========================================================
       - name: Setup Python 3.11
         uses: actions/setup-python@v6
         with:
           python-version: "3.11.13"
           check-latest: false
-          
 
 
       # ==========================================================
@@ -104,9 +101,11 @@ jobs:
           echo "=========================================="
 
           python --version
+          which python
+
           python -m pip --version
 
-          python -m pip install \
+          python -m pip install --upgrade \
             "pip<26" \
             "setuptools<81" \
             wheel \
@@ -114,6 +113,10 @@ jobs:
             "buildozer==1.6.0"
 
           python -m pip check
+
+          echo ""
+          echo "Installed packages:"
+          python -m pip list
 
 
       # ==========================================================
@@ -134,8 +137,16 @@ jobs:
           which python
 
           echo ""
+          echo "Python executable:"
+          python -c "import sys; print(sys.executable)"
+
+          echo ""
           echo "Pip:"
           python -m pip --version
+
+          echo ""
+          echo "Setuptools:"
+          python -c "import setuptools; print(setuptools.__version__)"
 
           echo ""
           echo "Cython:"
@@ -355,7 +366,7 @@ jobs:
           echo "ANDROIDMINAPI=21" >> "$GITHUB_ENV"
 
           # ------------------------------------------------------
-          # Use Android NDK r28c with Buildozer/p4a
+          # Android NDK r28c
           # ------------------------------------------------------
 
           echo "ANDROIDNDK=28c" >> "$GITHUB_ENV"
@@ -417,10 +428,44 @@ jobs:
 
 
       # ==========================================================
-      # CLEAN OLD BUILDOZER / P4A STATE
+      # VERIFY BUILD REQUIREMENTS
+      # ==========================================================
+      - name: Verify Buildozer requirements
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          echo "=========================================="
+          echo "VERIFYING BUILDOZER REQUIREMENTS"
+          echo "=========================================="
+
+          REQUIREMENTS_LINE="$(grep -E '^[[:space:]]*requirements[[:space:]]*=' buildozer.spec | head -n 1 || true)"
+
+          echo ""
+          echo "Requirements line:"
+          echo "$REQUIREMENTS_LINE"
+
+          if [ -z "$REQUIREMENTS_LINE" ]; then
+            echo "ERROR: requirements line not found in buildozer.spec"
+            exit 1
+          fi
+
+          echo ""
+          echo "Checking for Python version pin..."
+
+          if echo "$REQUIREMENTS_LINE" | grep -q "python3==3.11.13"; then
+            echo "Python 3.11.13 pin detected."
+          else
+            echo "WARNING: python3==3.11.13 was not found in requirements."
+            echo "Current requirements will be used exactly as defined in buildozer.spec."
+          fi
+
+
+      # ==========================================================
+      # CLEAN BUILDOZER / P4A STATE
       #
-      # IMPORTANT FIX:
-      # Removes stale internal venv/pip state.
+      # IMPORTANT:
+      # Removes stale Python 3.14 build environments.
       # ==========================================================
       - name: Clean Buildozer and p4a build state
         shell: bash
@@ -428,19 +473,36 @@ jobs:
           set -euxo pipefail
 
           echo "=========================================="
-          echo "CLEANING BUILDOZER BUILD STATE"
+          echo "CLEANING BUILDOZER / P4A STATE"
           echo "=========================================="
 
+          echo ""
+          echo "Removing .buildozer..."
+
           rm -rf .buildozer
+
+          echo ""
+          echo "Removing bin..."
+
           rm -rf bin
 
+          echo ""
+          echo "Removing local Python caches..."
+
+          rm -rf ~/.cache/pip
+          rm -rf ~/.cache/buildozer
+
+          echo ""
+          echo "Creating clean directories..."
+
           mkdir -p .buildozer
+          mkdir -p bin
 
           echo ""
           echo "Buildozer directory cleaned."
 
           echo ""
-          echo "Checking for stale virtual environments:"
+          echo "Checking for stale virtual environments..."
 
           if find .buildozer \
             -type d \
@@ -457,7 +519,7 @@ jobs:
 
 
       # ==========================================================
-      # PREFLIGHT CHECK
+      # PREFLIGHT BUILD ENVIRONMENT
       # ==========================================================
       - name: Preflight build environment
         shell: bash
@@ -472,6 +534,10 @@ jobs:
           echo "Python:"
           python --version
           which python
+
+          echo ""
+          echo "Python executable:"
+          python -c "import sys; print(sys.executable)"
 
           echo ""
           echo "Pip:"
@@ -519,24 +585,49 @@ jobs:
 
           echo ""
           echo "Checking Android platform:"
+
           test -d "$ANDROID_HOME/platforms/android-33"
 
           echo "Android platform OK"
 
           echo ""
           echo "Checking Build Tools:"
+
           test -d "$ANDROID_HOME/build-tools/33.0.2"
 
           echo "Build Tools OK"
 
           echo ""
           echo "Checking AIDL:"
+
           test -x "$ANDROID_HOME/build-tools/33.0.2/aidl"
 
           echo "AIDL OK"
 
           echo ""
+          echo "Checking AAPT2:"
+
+          test -x "$ANDROID_HOME/build-tools/33.0.2/aapt2"
+
+          echo "AAPT2 OK"
+
+          echo ""
+          echo "Checking D8:"
+
+          test -x "$ANDROID_HOME/build-tools/33.0.2/d8"
+
+          echo "D8 OK"
+
+          echo ""
+          echo "Checking ZIPALIGN:"
+
+          test -x "$ANDROID_HOME/build-tools/33.0.2/zipalign"
+
+          echo "ZIPALIGN OK"
+
+          echo ""
           echo "Checking Java:"
+
           test -n "$JAVA_HOME"
 
           echo "JAVA_HOME=$JAVA_HOME"
@@ -567,6 +658,14 @@ jobs:
           python --version
 
           echo ""
+          echo "Python executable:"
+          python -c "import sys; print(sys.executable)"
+
+          echo ""
+          echo "Pip:"
+          python -m pip --version
+
+          echo ""
           echo "Buildozer:"
           buildozer --version
 
@@ -591,6 +690,10 @@ jobs:
           java -version
 
           echo ""
+          echo "Buildozer configuration:"
+          grep -E '^(title|package.name|package.domain|requirements|android.api|android.minapi|android.ndk|android.archs|orientation)' buildozer.spec || true
+
+          echo ""
           echo "Starting clean Buildozer build..."
 
           buildozer -v android debug
@@ -606,6 +709,10 @@ jobs:
           echo "=========================================="
           echo "APK SEARCH"
           echo "=========================================="
+
+          echo ""
+          echo "Current directory:"
+          pwd
 
           echo ""
           echo "Searching for APK/AAB files..."
@@ -627,6 +734,49 @@ jobs:
           else
             echo "bin directory does not exist."
           fi
+
+
+      # ==========================================================
+      # VERIFY APK
+      # ==========================================================
+      - name: Verify APK
+        if: success()
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          echo "=========================================="
+          echo "VERIFYING APK"
+          echo "=========================================="
+
+          APK_COUNT="$(find bin -maxdepth 1 -type f -name "*.apk" | wc -l)"
+
+          echo ""
+          echo "APK count:"
+          echo "$APK_COUNT"
+
+          if [ "$APK_COUNT" -eq 0 ]; then
+            echo "ERROR: No APK was generated."
+            exit 1
+          fi
+
+          echo ""
+          echo "Generated APK files:"
+
+          find bin \
+            -maxdepth 1 \
+            -type f \
+            -name "*.apk" \
+            -print
+
+          echo ""
+          echo "APK file information:"
+
+          find bin \
+            -maxdepth 1 \
+            -type f \
+            -name "*.apk" \
+            -exec ls -lh {} \;
 
 
       # ==========================================================
