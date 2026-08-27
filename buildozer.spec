@@ -27,13 +27,23 @@ android.api = 33
 
 android.minapi = 21
 
-android.ndk = 28c
+android.ndk = 28.2.13676358
 
 android.ndk_api = 21
 
-android.build_tools_version = 33.0.2
-
 android.archs = arm64-v8a,armeabi-v7a
+
+
+# ============================================================
+# ANDROID SDK / NDK
+#
+# These are supplied by the GitHub Actions workflow.
+# The workflow creates a clean SDK and points Buildozer to it.
+# ============================================================
+
+android.skip_update = True
+
+android.accept_sdk_license = True
 
 
 # ============================================================
