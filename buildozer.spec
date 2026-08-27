@@ -1,5 +1,9 @@
 [app]
 
+# ============================================================
+# APPLICATION
+# ============================================================
+
 title = Money Tracker
 
 package.name = moneytracker
@@ -27,23 +31,27 @@ android.api = 33
 
 android.minapi = 21
 
-android.ndk = 28.2.13676358
+android.ndk = 28c
 
 android.ndk_api = 21
+
+android.build_tools_version = 33.0.2
 
 android.archs = arm64-v8a,armeabi-v7a
 
 
 # ============================================================
-# ANDROID SDK / NDK
+# USE RUNNER'S EXISTING ANDROID SDK
 #
-# These are supplied by the GitHub Actions workflow.
-# The workflow creates a clean SDK and points Buildozer to it.
+# IMPORTANT:
+# Do NOT let Buildozer download another SDK.
 # ============================================================
 
-android.skip_update = True
+android.sdk_path = /usr/local/lib/android/sdk
 
-android.accept_sdk_license = True
+android.ndk_path = /usr/local/lib/android/sdk/ndk/28.2.13676358
+
+android.skip_update = True
 
 
 # ============================================================
