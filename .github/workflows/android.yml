@@ -57,7 +57,7 @@ jobs:
 
 
       # ============================================================
-      # 4. LINUX BUILD DEPENDENCIES
+      # 4. LINUX DEPENDENCIES
       # ============================================================
 
       - name: Install Linux build dependencies
@@ -72,29 +72,31 @@ jobs:
             git \
             zip \
             unzip \
+            wget \
+            curl \
+            lbzip2 \
             autoconf \
             automake \
+            autopoint \
             libtool \
             pkg-config \
             zlib1g-dev \
             libncurses5-dev \
             libncursesw5-dev \
-            libtinfo6 \
-            cmake \
             libffi-dev \
             libssl-dev \
-            gettext \
-            autopoint \
             libltdl-dev \
-            ccache
+            cmake \
+            ccache \
+            patch
 
 
       # ============================================================
-      # 5. INSTALL CYTHON + BUILDOZER
+      # 5. INSTALL BUILDOZER
       #
-      # python-for-android is NOT separately pinned here.
+      # Do NOT separately pin python-for-android.
       #
-      # Buildozer/p4a dependency handling remains in control.
+      # Buildozer/p4a dependency resolution is left intact.
       # ============================================================
 
       - name: Install Buildozer
@@ -130,9 +132,16 @@ jobs:
 
           buildozer --version
 
+          echo "========================================"
+          echo "P4A LOCATION IF PRESENT"
+          echo "========================================"
+
+          command -v p4a || true
+          p4a --version || true
+
 
       # ============================================================
-      # 6. LOCATE BUILDOZER PROJECT
+      # 6. LOCATE PROJECT
       # ============================================================
 
       - name: Locate Buildozer project
@@ -152,7 +161,7 @@ jobs:
             echo "ERROR: buildozer.spec not found."
 
             find "$GITHUB_WORKSPACE" \
-              -maxdepth 5 \
+              -maxdepth 6 \
               -type f \
               | sort \
               | head -500
@@ -163,7 +172,7 @@ jobs:
           PROJECT_DIR="$(dirname "$SPEC_FILE")"
 
           echo "========================================"
-          echo "BUILDOZER PROJECT"
+          echo "PROJECT"
           echo "========================================"
 
           echo "SPEC_FILE=$SPEC_FILE"
@@ -176,8 +185,6 @@ jobs:
 
       # ============================================================
       # 7. VERIFY SPEC
-      #
-      # The spec is the source of truth.
       # ============================================================
 
       - name: Verify buildozer.spec
@@ -187,88 +194,114 @@ jobs:
           set -eux
 
           echo "========================================"
-          echo "PROJECT"
+          echo "PROJECT FILES"
           echo "========================================"
 
           pwd
           ls -lah
 
           echo "========================================"
-          echo "ANDROID CONFIGURATION"
+          echo "ANDROID SETTINGS FROM SPEC"
           echo "========================================"
 
           grep -n -E \
             'android\.api|android\.minapi|android\.ndk|android\.ndk_api|android\.build_tools_version|android\.accept_sdk_license|android\.archs|p4a\.bootstrap' \
-            buildozer.spec
+            buildozer.spec \
+            || true
 
           echo "========================================"
-          echo "BUILD TOOLS"
-          echo "========================================"
-
-          grep -n \
-            'android.build_tools_version' \
-            buildozer.spec
-
-          echo "========================================"
-          echo "NDK"
-          echo "========================================"
-
-          grep -n \
-            'android.ndk' \
-            buildozer.spec
-
-
-      # ============================================================
-      # 8. VERIFY BUILD CONFIGURATION
-      #
-      # Do not override Android SDK/NDK versions here.
-      # ============================================================
-
-      - name: Verify build configuration
-        shell: bash
-        working-directory: ${{ env.PROJECT_DIR }}
-        run: |
-          set -eux
-
-          echo "========================================"
-          echo "BUILD CONFIGURATION"
-          echo "========================================"
-
-          echo "Python:"
-          python --version
-
-          echo "Java:"
-          java -version
-
-          echo "Buildozer:"
-          buildozer --version
-
-          echo "========================================"
-          echo "SPEC"
+          echo "COMPLETE SPEC"
           echo "========================================"
 
           cat buildozer.spec
 
 
       # ============================================================
-      # 9. BUILD
+      # 8. CLEAN ONLY PROJECT BUILD CACHE
       #
       # IMPORTANT:
       #
-      # Buildozer is responsible for preparing the Android
-      # environment according to buildozer.spec.
+      # Do NOT delete ~/.buildozer Android SDK here.
+      # Buildozer owns and manages that SDK.
+      # ============================================================
+
+      - name: Clean project Buildozer cache
+        shell: bash
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          set -eux
+
+          rm -rf .buildozer
+
+          mkdir -p bin
+
+          echo "========================================"
+          echo "PROJECT BUILD CACHE CLEANED"
+          echo "========================================"
+
+          echo "Source files preserved."
+          echo "Buildozer global Android environment was NOT deleted."
+
+
+      # ============================================================
+      # 9. REMOVE ONLY CONFLICTING EXTERNAL ANDROID VARIABLES
       #
-      # No manual:
-      #   - Build Tools 33
-      #   - Build Tools 37
-      #   - NDK version
-      #   - sdkmanager package installation
-      #   - Android SDK replacement
+      # GitHub hosted runners can expose their own Android SDK/NDK.
       #
-      # is performed here.
+      # We do not use those locations.
       #
-      # android.accept_sdk_license = True in the spec allows
-      # non-interactive license acceptance.
+      # Buildozer will use its own Android environment.
+      # ============================================================
+
+      - name: Isolate Buildozer Android environment
+        shell: bash
+        run: |
+          set -eux
+
+          echo "========================================"
+          echo "BEFORE ISOLATION"
+          echo "========================================"
+
+          echo "ANDROID_HOME=${ANDROID_HOME:-}"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-}"
+          echo "ANDROIDSDK=${ANDROIDSDK:-}"
+          echo "ANDROID_NDK=${ANDROID_NDK:-}"
+          echo "ANDROID_NDK_HOME=${ANDROID_NDK_HOME:-}"
+          echo "ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT:-}"
+          echo "ANDROIDNDK=${ANDROIDNDK:-}"
+
+          # Remove runner-provided Android locations.
+          #
+          # We are NOT deleting the runner's files.
+          # We are only preventing them from being selected
+          # through environment variables.
+
+          echo "ANDROID_HOME=" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=" >> "$GITHUB_ENV"
+          echo "ANDROIDSDK=" >> "$GITHUB_ENV"
+
+          echo "ANDROID_NDK=" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=" >> "$GITHUB_ENV"
+          echo "ANDROIDNDK=" >> "$GITHUB_ENV"
+
+          echo "========================================"
+          echo "EXTERNAL ANDROID VARIABLES ISOLATED"
+          echo "========================================"
+
+
+      # ============================================================
+      # 10. BUILDOZER ANDROID BUILD
+      #
+      # IMPORTANT:
+      #
+      # No sdkmanager package is manually installed here.
+      #
+      # No Build Tools version is forced here.
+      #
+      # No NDK version is forced here.
+      #
+      # The buildozer.spec is the source of truth.
       # ============================================================
 
       - name: Build MoneyTracker APK
@@ -278,13 +311,10 @@ jobs:
           set -eux
 
           echo "========================================"
-          echo "MONEYTRACKER ANDROID BUILD"
+          echo "MONEYTRACKER BUILD"
           echo "========================================"
 
-          echo "========================================"
-          echo "PROJECT"
-          echo "========================================"
-
+          echo "Project:"
           pwd
 
           echo "========================================"
@@ -306,12 +336,26 @@ jobs:
           buildozer --version
 
           echo "========================================"
-          echo "SPEC ANDROID SETTINGS"
+          echo "ANDROID ENVIRONMENT BEFORE BUILDOZER"
+          echo "========================================"
+
+          echo "ANDROID_HOME=${ANDROID_HOME:-}"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-}"
+          echo "ANDROIDSDK=${ANDROIDSDK:-}"
+
+          echo "ANDROID_NDK=${ANDROID_NDK:-}"
+          echo "ANDROID_NDK_HOME=${ANDROID_NDK_HOME:-}"
+          echo "ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT:-}"
+          echo "ANDROIDNDK=${ANDROIDNDK:-}"
+
+          echo "========================================"
+          echo "BUILDOZER SPEC"
           echo "========================================"
 
           grep -n -E \
             'android\.api|android\.minapi|android\.ndk|android\.ndk_api|android\.build_tools_version|android\.accept_sdk_license|android\.archs|p4a\.bootstrap' \
-            buildozer.spec
+            buildozer.spec \
+            || true
 
           echo "========================================"
           echo "STARTING BUILDOZER"
@@ -325,16 +369,18 @@ jobs:
 
 
       # ============================================================
-      # 10. INSPECT BUILDOZER SDK AFTER BUILD
+      # 11. INSPECT BUILDOZER ENVIRONMENT AFTER BUILD
       #
-      # This happens AFTER Buildozer has had the opportunity to
-      # create/install its required Android components.
+      # This is informational only.
+      # It does NOT fail the build if a particular directory
+      # is absent after a successful APK build.
       # ============================================================
 
-      - name: Inspect Android environment after build
+      - name: Inspect Buildozer Android environment
+        if: always()
         shell: bash
         run: |
-          set -eux
+          set -u
 
           SDK="$HOME/.buildozer/android/platform/android-sdk"
 
@@ -346,12 +392,36 @@ jobs:
 
           if [ -d "$SDK" ]; then
 
+            echo "SDK exists."
+
+            echo "========================================"
+            echo "SDK DIRECTORIES"
+            echo "========================================"
+
+            find "$SDK" \
+              -maxdepth 2 \
+              -type d \
+              2>/dev/null \
+              | sort \
+              | head -300 \
+              || true
+
             echo "========================================"
             echo "BUILD TOOLS"
             echo "========================================"
 
             find "$SDK/build-tools" \
               -maxdepth 2 \
+              -type d \
+              2>/dev/null \
+              | sort \
+              || true
+
+            echo "========================================"
+            echo "AIDL"
+            echo "========================================"
+
+            find "$SDK/build-tools" \
               -type f \
               -name "aidl" \
               -print \
@@ -363,6 +433,7 @@ jobs:
             echo "========================================"
 
             find "$SDK/ndk" \
+              -mindepth 2 \
               -maxdepth 2 \
               -type f \
               -name "source.properties" \
@@ -371,20 +442,19 @@ jobs:
               || true
 
           else
-            echo "Buildozer SDK directory not found at:"
-            echo "$SDK"
 
-            echo "This does not automatically mean the APK build failed."
-            echo "The actual build result is checked in the next step."
+            echo "Buildozer SDK directory not found:"
+            echo "$SDK"
 
           fi
 
 
       # ============================================================
-      # 11. FIND APK
+      # 12. SEARCH FOR APK
       # ============================================================
 
       - name: Verify generated APK
+        if: success()
         shell: bash
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
@@ -410,21 +480,10 @@ jobs:
             echo "ERROR: APK was not generated."
 
             echo "========================================"
-            echo "BIN DIRECTORY"
+            echo "BIN"
             echo "========================================"
 
             ls -lah bin || true
-
-            echo "========================================"
-            echo "BUILDOZER BUILD DIRECTORY"
-            echo "========================================"
-
-            find .buildozer \
-              -maxdepth 6 \
-              -type f \
-              2>/dev/null \
-              | tail -300 \
-              || true
 
             exit 1
           fi
@@ -438,10 +497,11 @@ jobs:
 
 
       # ============================================================
-      # 12. APK INFORMATION
+      # 13. APK SHA256
       # ============================================================
 
-      - name: Show APK information
+      - name: Calculate APK SHA256
+        if: success()
         shell: bash
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
@@ -457,24 +517,18 @@ jobs:
           test -n "$APK_FILE"
 
           echo "========================================"
-          echo "APK"
+          echo "APK SHA256"
           echo "========================================"
 
-          echo "File:"
-          echo "$APK_FILE"
-
-          echo "Size:"
-          ls -lh "$APK_FILE"
-
-          echo "SHA256:"
           sha256sum "$APK_FILE"
 
 
       # ============================================================
-      # 13. UPLOAD APK
+      # 14. UPLOAD APK
       # ============================================================
 
       - name: Upload MoneyTracker APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: MoneyTracker-APK
@@ -484,10 +538,11 @@ jobs:
 
 
       # ============================================================
-      # 14. SUCCESS
+      # 15. SUCCESS
       # ============================================================
 
       - name: Build complete
+        if: success()
         shell: bash
         run: |
           echo "========================================"
