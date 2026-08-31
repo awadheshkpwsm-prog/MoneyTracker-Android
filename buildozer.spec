@@ -14,8 +14,6 @@ requirements = python3,kivy
 orientation = portrait
 fullscreen = 0
 
-# Android
-
 android.api = 33
 android.minapi = 21
 
@@ -29,11 +27,8 @@ android.allow_backup = True
 
 android.accept_sdk_license = True
 
-# p4a
-
 p4a.bootstrap = sdl2
-
-# Artifacts
+p4a.branch = develop
 
 android.debug_artifact = apk
 android.release_artifact = aab
