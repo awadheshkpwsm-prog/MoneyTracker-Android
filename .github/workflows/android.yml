@@ -333,7 +333,7 @@ jobs:
       # No Android SDK, Build Tools or NDK are installed here.
       # ============================================================
 
-      - name: 10 - Install host build dependencies
+            - name: 10 - Install and verify host build dependencies
         run: |
           set -euxo pipefail
 
@@ -346,6 +346,7 @@ jobs:
             autoconf \
             automake \
             libtool \
+            libtool-bin \
             pkg-config \
             zlib1g-dev \
             libncurses5-dev \
@@ -363,12 +364,27 @@ jobs:
             patch \
             file
 
+          echo "========================================"
+          echo "LIBTOOL INSTALLATION CHECK"
+          echo "========================================"
 
-      # ============================================================
+          echo "Package status:"
+          dpkg -l | grep -E 'libtool|libltdl' || true
+
+          echo
+          echo "Executable:"
+          command -v libtool
+
+          echo
+          echo "Version:"
+          libtool --version
+
+          echo
+          echo "PASS: libtool is installed and executable." ============================================================
       # 11. VERIFY HOST TOOLS
       # ============================================================
 
-      - name: 11 - Host tools diagnostic
+            - name: 11 - Host tools diagnostic
         run: |
           set -o pipefail
 
@@ -396,22 +412,71 @@ jobs:
 
           for TOOL in "${TOOLS[@]}"; do
 
+            echo "----------------------------------------"
+            echo "Checking: $TOOL"
+
             if command -v "$TOOL" >/dev/null 2>&1; then
+
               echo "PASS: $TOOL"
-              command -v "$TOOL"
+              echo "PATH: $(command -v "$TOOL")"
+
+              "$TOOL" --version 2>&1 | head -n 2 || true
+
             else
-              echo "FAIL: $TOOL not found"
+
+              echo "FAIL: $TOOL not found in PATH"
               FAILED=1
+
             fi
 
           done
 
+          echo
+          echo "========================================"
+          echo "LIBTOOL PACKAGE DIAGNOSTIC"
+          echo "========================================"
+
+          echo "PATH=$PATH"
+
+          echo
+          echo "command -v libtool:"
+          command -v libtool || true
+
+          echo
+          echo "which libtool:"
+          which libtool || true
+
+          echo
+          echo "dpkg package status:"
+          dpkg -l | grep -E 'libtool|libltdl' || true
+
+          echo
+          echo "Possible libtool files:"
+          dpkg -L libtool 2>/dev/null | grep '/libtool$' || true
+
+          echo
+          echo "Searching common locations:"
+          find \
+            /usr/bin \
+            /usr/local/bin \
+            -maxdepth 1 \
+            -type f \
+            -name "libtool*" \
+            -print \
+            2>/dev/null \
+            || true
+
+          echo
+          echo "========================================"
+          echo "FINAL HOST TOOL RESULT"
+          echo "========================================"
+
           if [ "$FAILED" -ne 0 ]; then
+            echo "HOST TOOL CHECK FAILED"
             exit 1
           fi
 
-
-      # ============================================================
+          echo "HOST TOOL CHECK PASSED" ============================================================
       # 12. INSTALL BUILDOZER / CYTHON ONLY
       # ============================================================
 
