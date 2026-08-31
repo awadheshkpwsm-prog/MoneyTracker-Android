@@ -14,8 +14,6 @@ requirements = python3,kivy
 orientation = portrait
 fullscreen = 0
 
-# Android
-
 android.api = 33
 android.minapi = 21
 
@@ -26,17 +24,11 @@ android.archs = arm64-v8a,armeabi-v7a
 
 android.private_storage = True
 android.allow_backup = True
-
 android.accept_sdk_license = True
-
-# Python-for-Android
 
 p4a.bootstrap = sdl2
 
-# Output
-
 android.debug_artifact = apk
-android.release_artifact = aab
 
 [buildozer]
 
