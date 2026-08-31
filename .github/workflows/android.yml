@@ -6,40 +6,29 @@ on:
 jobs:
   build:
 
-    runs-on: ubuntu-latest
-
-    env:
-      DEBIAN_FRONTEND: noninteractive
+    runs-on: ubuntu-22.04
 
     steps:
 
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Java 17
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Setup Python 3.11
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install Linux Dependencies
+      - name: Install System Packages
         run: |
           sudo apt-get update
-
           sudo apt-get install -y \
-            git \
-            zip \
-            unzip \
+            git zip unzip \
             openjdk-17-jdk \
-            autoconf \
-            automake \
-            libtool \
-            pkg-config \
+            autoconf automake \
+            libtool pkg-config \
             zlib1g-dev \
             libncurses5-dev \
             libffi-dev \
@@ -54,31 +43,21 @@ jobs:
           pip install Cython==0.29.34
           pip install buildozer==1.5.0
 
-      - name: Show Versions
-        run: |
-          python --version
-          java -version
-          buildozer --version
-
       - name: Clean Previous Build
         run: |
           rm -rf .buildozer
           rm -rf ~/.buildozer
           rm -rf bin
 
-      - name: Show buildozer.spec
+      - name: Show Versions
         run: |
-          cat buildozer.spec
+          python --version
+          java -version
+          buildozer --version
 
       - name: Build APK
         run: |
-          buildozer -v android debug
-
-      - name: Find APK
-        if: always()
-        run: |
-          find . -name "*.apk"
-          find . -name "*.aab"
+          buildozer android debug
 
       - name: Upload APK
         if: success()
@@ -87,7 +66,7 @@ jobs:
           name: MoneyTracker-APK
           path: bin/*.apk
 
-      - name: Upload Failure Files
+      - name: Upload Failure Logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
