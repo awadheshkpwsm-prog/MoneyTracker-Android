@@ -13,16 +13,16 @@ jobs:
 
     steps:
 
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Java
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Setup Python
+      - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -37,6 +37,7 @@ jobs:
             unzip \
             openjdk-17-jdk \
             autoconf \
+            automake \
             libtool \
             pkg-config \
             zlib1g-dev \
@@ -47,29 +48,53 @@ jobs:
             ccache \
             libltdl-dev
 
+      - name: Python Information
+        run: |
+          python --version
+          pip --version
+
       - name: Install Buildozer
         run: |
           python -m pip install --upgrade pip
           pip install Cython==0.29.34
           pip install buildozer==1.6.0
 
-      - name: Clean Old Build Cache
+      - name: Verify Buildozer
+        run: |
+          buildozer --version
+
+      - name: Remove Old Build Cache
         run: |
           rm -rf .buildozer
+          rm -rf ~/.buildozer
           rm -rf bin
 
-      - name: Verify Environment
+      - name: Show buildozer.spec
         run: |
-          python --version
-          java -version
-          buildozer --version
+          cat buildozer.spec
 
       - name: Build APK
         run: |
           buildozer android debug
 
+      - name: List APK Files
+        if: always()
+        run: |
+          find . -name "*.apk"
+          find . -name "*.aab"
+
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: MoneyTracker-APK
           path: bin/*.apk
+
+      - name: Upload Logs On Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MoneyTracker-Failure-Logs
+          path: |
+            .buildozer
+            buildozer.spec
