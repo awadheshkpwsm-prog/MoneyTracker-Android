@@ -1493,26 +1493,39 @@ jobs:
       # ============================================================
       # 35A - FIX P4A BUILD VENV / PIP
       #
-      # THIS IS THE ONLY IMPORTANT NEW FIX.
+      # CURRENT ERROR:
       #
-      # Observed failure:
-      #
-      # build/venv/lib/python3.14/site-packages/pip
-      #
-      # followed by:
+      # build/venv/lib/python3.14/site-packages/pip/
       #
       # ImportError:
-      # BuildDependencyInstallError
+      # cannot import name 'BuildDependencyInstallError'
+      # from pip._internal.exceptions
       #
-      # python-for-android v2026.05.09 had a build/venv/pip
-      # corruption issue.
+      # ROOT CAUSE:
       #
-      # Upstream fix:
-      # create the temporary venv with --clear and avoid the
-      # problematic pip self-upgrade.
+      # python-for-android generated build/venv can contain a
+      # stale/mixed Python/pip environment.
       #
-      # Here we patch the downloaded p4a source directly so the
-      # existing workflow does not need to be redesigned.
+      # ONLY FIX:
+      #
+      # Change p4a's temporary venv creation from:
+      #
+      #   python -m venv venv
+      #
+      # to:
+      #
+      #   python -m venv --clear venv
+      #
+      # IMPORTANT:
+      #
+      # Do NOT change the workflow's host Python 3.11.13.
+      # Do NOT change Buildozer.
+      # Do NOT change Cython.
+      # Do NOT change SDK.
+      # Do NOT change NDK.
+      # Do NOT change buildozer.spec.
+      # Do NOT disable pip self-upgrade.
+      #
       # ============================================================
 
       - name: 35A - Patch python-for-android build venv handling
@@ -1521,18 +1534,24 @@ jobs:
           set -euxo pipefail
 
           echo "========================================"
-          echo "PATCHING PYTHON-FOR-ANDROID VENV"
+          echo "PATCHING PYTHON-FOR-ANDROID BUILD VENV"
           echo "========================================"
 
           P4A_DIR="$PROJECT_DIR/.buildozer/android/platform/python-for-android"
           P4A_BUILD="$P4A_DIR/pythonforandroid/build.py"
 
-          echo "P4A_DIR:"
+          echo
+          echo "P4A DIRECTORY:"
           echo "$P4A_DIR"
 
           echo
           echo "P4A BUILD FILE:"
           echo "$P4A_BUILD"
+
+          if [ ! -d "$P4A_DIR" ]; then
+            echo "ERROR: python-for-android directory not found."
+            exit 1
+          fi
 
           if [ ! -f "$P4A_BUILD" ]; then
             echo "ERROR: python-for-android build.py not found."
@@ -1540,109 +1559,119 @@ jobs:
           fi
 
           echo
-          echo "P4A VERSION / GIT:"
+          echo "========================================"
+          echo "P4A VERSION / GIT"
+          echo "========================================"
+
           if [ -d "$P4A_DIR/.git" ]; then
             git -C "$P4A_DIR" rev-parse --short HEAD || true
             git -C "$P4A_DIR" describe --tags --always || true
           fi
 
           echo
-          echo "Checking current venv creation code..."
+          echo "========================================"
+          echo "CURRENT VENV CREATION CODE"
+          echo "========================================"
 
-          grep -n -E \
-            "host_python.*-m.*venv|pip install -U pip" \
+          grep -n -F \
+            "shprint(host_python, '-m', 'venv'" \
             "$P4A_BUILD" \
             || true
 
-          cp "$P4A_BUILD" "$P4A_BUILD.before-moneytracker-fix"
+          echo
+          echo "========================================"
+          echo "BACKUP ORIGINAL P4A BUILD FILE"
+          echo "========================================"
+
+          cp \
+            "$P4A_BUILD" \
+            "$P4A_BUILD.before-moneytracker-venv-fix"
+
+          echo
+          echo "========================================"
+          echo "APPLY --CLEAR VENV FIX"
+          echo "========================================"
 
           python - "$P4A_BUILD" <<'PY'
           from pathlib import Path
           import sys
 
           path = Path(sys.argv[1])
+
           text = path.read_text()
 
-          original = text
+          old = "shprint(host_python, '-m', 'venv', 'venv')"
+          new = "shprint(host_python, '-m', 'venv', '--clear', 'venv')"
 
-          # Fix 1:
-          # Recreate p4a's temporary build venv cleanly.
-          old_venv = "shprint(host_python, '-m', 'venv', 'venv')"
-          new_venv = "shprint(host_python, '-m', 'venv', '--clear', 'venv')"
+          if new in text:
+              print("PATCH: --clear already present.")
+              raise SystemExit(0)
 
-          if old_venv in text:
-              text = text.replace(old_venv, new_venv, 1)
-              print("PATCH 1: venv --clear applied.")
-          elif new_venv in text:
-              print("PATCH 1: already applied.")
-          else:
-              print("PATCH 1: expected venv line not found.")
+          if old not in text:
+              print("ERROR: Expected p4a venv creation line was not found.")
+              print()
+              print("Expected line:")
+              print(old)
+              print()
+              print("No unrelated code will be modified.")
               raise SystemExit(2)
 
-          # Fix 2:
-          # Do not self-upgrade pip inside the generated p4a venv.
-          #
-          # The affected p4a code contains:
-          #
-          # source venv/bin/activate && pip install -U pip
-          #
-          # Replace only that exact command with a harmless version
-          # check. No other pip command is changed.
-          old_pip = "source venv/bin/activate && pip install -U pip"
-          new_pip = "source venv/bin/activate && python -m pip --version"
+          count = text.count(old)
 
-          if old_pip in text:
-              text = text.replace(old_pip, new_pip, 1)
-              print("PATCH 2: pip self-upgrade disabled.")
-          elif new_pip in text:
-              print("PATCH 2: already applied.")
-          else:
-              print("PATCH 2: expected pip self-upgrade command not found.")
+          if count != 1:
+              print(
+                  f"ERROR: Expected exactly 1 venv creation line, "
+                  f"found {count}."
+              )
               raise SystemExit(3)
 
-          if text == original:
-              raise SystemExit("ERROR: p4a build.py was not changed.")
+          text = text.replace(old, new, 1)
 
           path.write_text(text)
 
-          print("P4A PATCH COMPLETE.")
+          print("PASS: p4a venv creation changed to --clear.")
           PY
 
           echo
           echo "========================================"
-          echo "VERIFY P4A PATCH"
+          echo "VERIFY P4A VENV PATCH"
           echo "========================================"
 
-          grep -n -E \
-            "host_python.*-m.*venv|pip install -U pip|python -m pip --version" \
-            "$P4A_BUILD" \
-            || true
-
-          echo
-          echo "Checking that --clear exists:"
-
-          grep -F -- "-m', 'venv', '--clear', 'venv'" \
+          grep -n -F \
+            "shprint(host_python, '-m', 'venv', '--clear', 'venv')" \
             "$P4A_BUILD"
 
           echo
-          echo "Checking that old pip self-upgrade is gone:"
+          echo "Checking old venv creation line is gone..."
 
-          if grep -Fq "source venv/bin/activate && pip install -U pip" "$P4A_BUILD"; then
-            echo "ERROR: old pip self-upgrade command still exists."
+          if grep -Fq \
+            "shprint(host_python, '-m', 'venv', 'venv')" \
+            "$P4A_BUILD"; then
+
+            echo "ERROR: Old venv creation line still exists."
             exit 1
+
           fi
 
-          echo "PASS: old pip self-upgrade command removed."
+          echo "PASS: Old venv creation line removed."
 
           echo
-          echo "P4A VENV/PIP PATCH: PASS"
+          echo "========================================"
+          echo "VERIFY NO UNRELATED PIP PATCH"
+          echo "========================================"
+
+          echo "The existing pip behavior is intentionally preserved."
+
+          echo
+          echo "P4A BUILD VENV PATCH: PASS"
 
 
       # ============================================================
       # 35B - REMOVE ANY VENV CREATED BEFORE PATCH
       #
-      # This is intentionally separate from 35A.
-      # It guarantees the patched p4a code creates the venv fresh.
+      # This remains intentionally separate from 35A.
+      # It guarantees that the patched p4a code creates the venv
+      # from a clean state.
       # ============================================================
 
       - name: 35B - Remove generated p4a venv after patch
